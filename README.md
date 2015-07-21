@@ -21,5 +21,4 @@
 - Data Access Component (DAC) Notes [原文](https://github.com/dotnet/coreclr/blob/master/Documentation/botr/dac-notes.md) [日本語訳](dac-notes.md)
 - Profiling [原文](https://github.com/dotnet/coreclr/blob/master/Documentation/botr/profiling.md) [日本語訳](profiling.md)
 - Implementing Profilability [原文](https://github.com/dotnet/coreclr/blob/master/Documentation/botr/profilability.md) [日本語訳](profilability.md)
-- What Every Dev needs to Know About Exceptions in the Runtime [原文](https://github.com/dotnet/coreclr/blob/master/Documentation/botr/profilability
-exceptions.md) [日本語訳](exceptions.md)
+- What Every Dev needs to Know About Exceptions in the Runtime [原文](https://github.com/dotnet/coreclr/blob/master/Documentation/botr/exceptions.md) [日本語訳](exceptions.md)
