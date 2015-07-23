@@ -25,28 +25,29 @@ Mscorlibには、さまざまな独自の特性があり、その多くはCLRと
 - Mscorlibの型はネイティブ相互運用で多用されており、マネージド例外はそれらのネイティブエラーコードおよびエラーフォーマットに正しく対応していなければなりません。
 - CLR上の複数のJITコンパイラでは、mscorlib中のある種のメソッドの集合について、パフォーマンス上の理由で特別扱いで処理することがあります。これは、メソッドを最適化して省略する場合（Math.Cos(double)など）としても、独特のメソッド呼び出しが行われる場合（たとえばArray.Lengthや、StringBuilderが現在のスレッドを取得するといった実装の詳細）としてもあり得ます。
 - Mscorlibでは、必要な場合は、P/Invokeを使用して、主に、動作しているオペレーティング システムあるいはプラットフォーム適合レイヤー（platform adaptation layer, PAL）のネイティブコードを呼び出す必要があります。
-- Mscorlibは、CLRに対して、CLR固有の機能、たとえばガベージコレクションの起動、クラスのロード、型システムとの複雑な相互運用などを、呼び出せるように公開することを要求します。このために、マネージドコードとネイティブの間にブリッジが有ることが求められ、それらはCLRの中で「手作業で管理されて」います。
+- Mscorlibは、CLRに対して、CLR固有の機能、たとえばガベージコレクションの起動、クラスのロード、型システムとの複雑な相互運用などを、呼び出せるように公開することを要求します。このために、マネージドコードと、CLRに含まれるネイティブの「マニュアル マネージド」コードの間に、橋渡しが求められます。
 - CLRは、マネージドメソッドを呼び出すことで、マネージドコードの中でのみ実装されている機能を使用する必要もあります。
 
-# Interface between managed & CLR code
+# マネージドコードとCLRコード間のインターフェース
 
-To reiterate, the needs of managed code in mscorlib include:
+繰り返しになりますが、mscorlibに含まれるマネージドコードの必要性は以下の通りです:
 
-- The ability to access fields of some managed data structures in both managed code and "manually managed" code within the CLR
-- Managed code must be able to call into the CLR
-- The CLR must be able to call managed code.
+- いくつかの、マネージドコードとCLR中の「マニュアル マネージド」コードの両方にある、マネージドデータ構造のフィールドに、アクセスできること
+- マネージドコードがCLRの中身を呼び出せること
+- CLRがマネージドコードを呼び出せること
 
-To implement these, we need a way for the CLR to specify and optionally verify the layout of a managed object in native code, a managed mechanism for calling into native code, and a native mechanism for calling into managed code.
+これらを実装するためには、CLRがネイティブコード中でマネージドオブジェクトのレイアウトを指定し、状況に応じて検証する方法、ネイティブコードを呼び出すマネージドの機構、マネージドコードを呼び出すネイティブの機構、が必要となります。
 
-The managed mechanism for calling into native code must also support the special managed calling convention used by String's constructors, where the constructor allocates the memory used by the object (instead of the typical convention where the constructor is called after the GC allocates memory).
+ネイティブコードを呼び出すためのマネージドの機構では、Stringのコンストラクターで使用される特別なマネージド呼び出し規約もサポートしなければなりません。このコンストラクターは、そのオブジェクトによって使用されるメモリを確保します（通常の規約では、GCがメモリを確保した後でコンストラクターが呼び出されます）。
 
-The CLR provides a [mscorlib binder](https://github.com/dotnet/coreclr/blob/master/src/vm/binder.cpp) internally, providing a mapping between unmanaged types and fields to managed types & fields. The binder will look up & load classes, allow you to call managed methods. It also does some simple verification to ensure the correctness of any layout information specified in both managed & native code. The binder ensures that the managed class you're attempting to use exists in mscorlib, has been loaded, and the field offsets are correct. It also needs the ability to differentiate between method overloads with different signatures.
+CLRでは、内部的に、[mscorlib バインダー](https://github.com/dotnet/coreclr/blob/master/src/vm/binder.cpp)が、アンマネージド型とそのフィールド群から、マネージド型とそのフィールド群への、マッピングを提供します。このバインダーはクラス群をルックアップおよびロードして、あなたがマネージドメソッドを呼び出せるようにします。これは、いくつかの簡単な検証も行い、マネージドとネイティブのコード間で指定されたレイアウト情報が正しいかどうかも確認します。このバインダーは、あなたが使用しようとしているマネージドクラスがmscorlib内に存在し、ロードされ、フィールドオフセットが正しいことを確認します。また、メソッドのオーバーロードの間で、それぞれシグネチャーが異なるものとして区別できる能力も必要となります。
 
-# Calling from managed to native code
+# マネージドコードからネイティブコードを呼び出す
 
-We have two techniques for calling into the CLR from managed code. FCall allows you to call directly into the CLR code, and provides a lot of flexibility in terms of manipulating objects, though it is easy to cause GC holes by not tracking object references correctly. QCall allows you to call into the CLR via the P/Invoke, and is much harder to accidentally mis-use than FCall. FCalls are identified in managed code as extern methods with the MethodImplOptions.InternalCall bit set. QCalls are _static_ extern methods that look like regular P/Invokes, but to a library called "QCall".
+マネージドコードからCLRを呼び出す方法は2つあります。FCallでは、CLRコードを直接呼び出すことができます。これは、フレキシブルなオブジェクトの操作を多大に行うことができますが、オブジェクト参照を正しくトラッキングしないことで簡単にGCの抜け穴を作ることが出来てしまいます。
+QCallでは、P/InvokeによってCLRを呼び出すことができます。これはFCallよりもはるかにミスユースの可能性が小さくなります。FCallは、MethodImplOptions.InternalCallを指定されたexternメソッドとして識別できます。QCallは、通常のP/Invokeと同様に見える_staticな_externメソッドですが、"QCall"というライブラリを呼び出すものです。
 
-There is a small variant of FCall called HCall (for Helper call) for implementing JIT helpers, for doing things like accessing multi-dimensional array elements, range checks, etc. The only difference between HCall and FCall is that HCall methods won't show up in an exception stack trace.
+FCallには、HCall（Helper Call）と呼ばれる小規模な亜種があります。これは、JITのヘルパーを実装するもので、多次元配列要素へのアクセスや範囲チェックなどを行うためのものです。HCallとFCallの違いは、HCallのメソッドは例外スタックトレース上に出現しない、ということです。
 
 ### Choosing between FCall, QCall, P/Invoke, and writing in managed code
 
