@@ -96,108 +96,99 @@ _スロット_ と言う用語は、常に従来のvtableのレイアウトに�
 
 つまり、このマップを見ると、スロットマップのサブマップの1番目の列が、従来の仮想テーブルビューのスロット番号に対応しているのが分かります（System.Object自身が4つの仮想メソッドを提供していることを思い出してください。ただし、わかりやすくするためにそれらは省略しています）。メソッドの実装の検索は常にボトムアップです。つまり、型 _B_ のオブジェクトがあり、 _I.Foo_ を呼び出したいとすると、 _B_ のスロットマップを起点として _I.Foo_ のマッピングを探すことになります。そこで見つからないので、 _A_ のスロットマップに行って検索し、そこで見つけます。そこでは、 _I_ の仮想スロット0（ _I.Foo_ に対応します）は仮想スロット0で実装されていると記述されています。そして、 _B_ のスロットマップに戻り、スロット0の実装を検索し、B自身の実装テーブルのスロット1で実装されていることがわかります。
 
-### Additional Uses
-<!--
-### 追加の使用方法
--->
+### さらなる使用法
 
-It is important to note that this mapping technique can be used to implement methodimpl re-mapping of virtual slots (i.e., a virtual slot mapping in the map for the current class, similar to how an interface slot is mapped to a virtual slot). Because of the scoping capabilities of the map, non-virtual methods may also be referenced. This may be useful if ever the runtime wants to support the implementation of interfaces with non-virtual methods.
-<!--
-このマッピングテクニックを、仮想スロットのメソッド実装再マッピングの実装に使用できる（つまり、現在のクラスに対するスロットマップ内の仮想スロットマッピングは、インターフェイススロットが仮想スロットにマップされる方法によく似ている）ことに注意することが重要です。スロットマップのスコープ設定機能により、非仮想メソッドも参照されるようにできます。これは、ランタイムが非仮想メソッドでのインターフェイスの実装をサポートしたい場合であっても有用なことでしょう。
--->
+このマッピングテクニックを、仮想スロットのメソッド実装再マッピングの実装に使用できる（つまり、現在のクラス用のスロットマップ内の仮想スロットマッピングは、インターフェイススロットが仮想スロットにマップされる方法によく似ている）ことに注意することが重要です。スロットマップにはスコープ設定機能があるので、非仮想メソッドも同じように参照できます。これは、ランタイムが非仮想メソッドでのインターフェイスの実装をサポートしたい場合であっても役に立つことでしょう。
 
-### Optimizations
-<!--
 ### 最適化
--->
 
-The slot maps are bit-encoded and take advantage of typical interface implementation patterns using delta values, thus reducing the map size significantly. In addition, new slots (both virtual and non-) can be implied by their order in the implementation table. If the table contains new virtual slots followed by new instance slots, then followed by overrides, then the appropriate slot map entries can be implied by their index in the implementation table combined with the number of virtuals inherited by the parent class. All such implied map entries have been indicated with a (\*). The current layout of data structures uses the following pattern, where the DispatchMap is only present when mappings cannot be fully implied by ordering in the implementation table.
-<!--
-スロットマップはビットエンコードされており、デルタ値を使用して典型的なインターフェイス実装パターンを活用するので、スロットマップのサイズは顕著に小さくなっています。さらに、新しいスロット（仮想と非仮想の両方）は実装テーブル内の順序によって黙示できます。実装テーブルが新しい仮想スロットに続けて新しいインスタンススロット、さらにその後にオーバーライドを保持する場合、親クラスによって継承された仮想メソッドの数と組み合わせた実装テーブル内のインデックスから、適切なスロットマップエントリを黙示できます。そのように暗黙的に示されるマップエントリはすべて (\*) で示されます。データ構造の現在のレイアウトは以下のパターンを使用します。ここで、DispatchMap は実装テーブルの順序によってマッピングを完全に黙示できない場合にのみ存在します。
--->
+スロットマップはビット列としてエンコードされており、差分値を使用して典型的なインターフェイス実装パターンをさばくので、スロットマップのサイズは非常に小さなものになっています。さらに、新しいスロット（仮想と非仮想の両方）は実装テーブル内の順序によって黙示されます。実装テーブルが新しい仮想スロットに続けて新しいインスタンススロット、さらにその後にオーバーライドを保持する場合、親クラスによって継承された仮想メソッドの数と実装テーブルにおけるインデックスを組み合わせることで、適切なスロットマップエントリを黙示できます。そのように暗黙的に示されるマップエントリはすべて (\*) で示されます。データ構造の現在のレイアウトは以下のパターンを使用します。ここで、ディスパッチマップ（DispatchMap）は、実装テーブルの順序ではマッピングを完全に黙示できない場合にのみ存在します。
 
-	MethodTable -> [DispatchMap ->] ImplementationTable
+	メソッドテーブル -> [ディスパッチマップ ->] 実装テーブル
 
-Type ID Map
+型IDマップ
 -----------
 
-This will map types to IDs, which are allocated as monotonically increasing values as each previously unmapped type is encountered. Currently, all such types are interfaces. 
+これは、型からIDへのマップです。IDは、それまでマップされていなかった型に遭遇するたびに単調増加する値として割り当てられます。現在、IDが割り当てられる型は、インターフェイスです。
 
-Currently, this is implemented using a HashMap, and contains entries for both lookup directions.
+現在、このマップはハッシュマップを使用して実装されており、双方向に検索するためのエントリを保持します。
 
-Dispatch Tokens
+ディスパッチトークン
 ---------------
 
-Dispatch tokens will be <_typeID_,_slot_> tuples. For interfaces, the type will be the interface ID assigned to that type. For virtual methods, this will be a constant value to indicate that the slot should just be resolved virtually within the type to be dispatched on (a virtual method call on _this_). This value pair will in most cases fit into the platform's native word size. On x86, this will likely be the lower 16 bits of each value, concatenated. This can be generalized to handle overflow issues similar to how a _TypeHandle_ in the runtime can be either a _MethodTable_ pointer or a <_TypeHandle,TypeHandle_> pair, using a sentinel bit to differentiate the two cases. It has yet to be determined if this is necessary.
+ディスパッチトークン（Dispatch Token）は、<_型ID_, _スロット_>のタプルです。インターフェイスの場合、型IDは、その型に割り当てられたインターフェイスIDになります。仮想メソッドの場合、そのスロットが（_this_ に対する仮想メソッド呼び出しとして）単にディスパッチされる型で仮想的に解決されるべきことを示す定数値になります。この値のペアはほとんどの場合にプラットフォームのネイティブのワードサイズに収まります。x86では、それぞれの値の下位16ビットが結合されることになるでしょう。これは、ランタイムの _TypeHandle_ が _メソッドテーブル_ ポインターか、<_TypeHandle_, _TypeHandle_> のペアのいずれかになる可能性があり、番兵ビットを使用してこれら2つのケースを区別する、ということと類似の、オーバーフロー問題の処理の仕方に一般化できます。これが必要かどうかはまだ未定です。
 
-Design of Virtual Stub Dispatch
+仮想スタブディスパッチの設計
 ===============================
 
-Dispatch Token to Implementation Resolution
+ディスパッチトークンからの実装の解決
 -------------------------------------------
 
-Given a token and type, the implementation is found by mapping the token to an implementation table index for the type. The implementation table is reachable from the type's MethodTable. This map is created in BuildMethodTable: it enumerates all interfaces implemented by the type for which it is building a MethodTable and determines every interface method that the type implements or overrides. By keeping track of this information, at interface dispatch time it is possible to determine the target code given the token and the target object (from which the MethodTable and token mapping can be obtained).
+所与のトークンと型について、実装は、その型用の実装テーブルのインデックスにトークンをマッピングすることで見つかります。実装テーブルは型のメソッドテーブルから到達可能です。このマップはBuildMethodTableで作成されます。この関数はメソッドテーブルを構築している方によって実装されるすべてのインターフェイスを列挙し、すべてのインターフェイスメソッドについて、その型がそのメソッドを実装するのか、またはオーバーライドするのかを判定します。この情報を追跡し続けることで、インターフェイスディスパッチの実行時に、与えられたトークンとターゲットオブジェクト（メソッドテーブルとトークンマッピングの取得先になります）からターゲットのコードを判定できるのです。
 
-Stubs
+スタブ
 -----
 
-Interface dispatch calls go through stubs. These stubs are all generated on demand, and all have the ultimate purpose of matching a token and object with an implementation, and forwarding the call to that implementation.
+インターフェイスディスパッチはスタブを通じて呼び出します。これらのスタブはすべて必要に応じて生成され、すべてがトークンとオブジェクトを実装に一致させるという最終目標を持っており、呼び出しを実装に転送します。
 
 There are currently three types of stubs. The below diagram shows the general control flow between these stubs, and will be explained below.
+現在、スタブは3種類あります。以下の図は、図の後で説明する、これらのスタブ間の一般的な制御フローを示しています。
 
-![Figure 2](images/virtualstubdispatch-fig2.png)
+![Figure 2](https://github.com/dotnet/coreclr/blob/master/Documentation/images/virtualstubdispatch-fig2.png)
 
-### Generic Resolver
+### 汎用リゾルバー
 
-This is in fact just a C function that serves as the final failure path for all stubs. It takes a <_token_, _type_> tuple and returns the target. The generic resolver is also responsible for creating dispatch and resolver stubs when they are required, patching indirection cells when better stubs become available, caching results, and all bookkeeping.
+実際のところ、汎用リゾルバー（Generic Resolver）はすべてのスタブに対する最終的な失敗パスとして提供されるCの関数にすぎません。<_トークン_, _型_> タプルを受け取り、ターゲットを返します。汎用リゾルバーは、必要な場合にディスパッチスタブと解決スタブを作成し、より適切なスタブが利用可能になった場合には間接化セル（indirection cell）をパッチングし、結果をキャッシュし、あらゆる記録処理（bookkeeping）を行う役割も持ちます。
 
-### Lookup Stubs
 
-These stubs are the first to be assigned to an interface dispatch call site, and are created when the JIT compiles an interface call site. Since the JIT has no knowledge of the type being used to satisfy a token until the first call is made, this stub passes the token and type as arguments to the generic resolver. If necessary, the generic resolver will also create dispatch and resolve stubs, and will then back patch the call site to the dispatch stub so that the lookup stub is no longer used.
+### 検索スタブ
 
-One lookup stub is created for each unique token (i.e., call sites for the same interface slot will use the same lookup stub).
+検索スタブ（Lookup Stub）はインターフェイスディスパッチのコールサイトに最初に割り当てられ、JITがインターフェイスのコールサイトをコンパイルするときに作成されます。JITは、最初の呼び出しが行われるまでトークンに埋め込むための型について何も知らないので、このスタブは汎用リゾルバーへの引数としてトークンと型を渡します。必要ならば、汎用リゾルバーもディスパッチスタブと解決スタブを作成し、ディスパッチスタブに向くようコールサイトにパッチを当て、検索スタブは使用されなくなります。
 
-### Dispatch Stubs
+一意なトークンそれぞれに対して、1つの検索スタブが作成されます（つまり、同じインターフェイススロットに対するコールサイトは同じ検索スタブを使用することになります）
 
-These stubs are used when a call site is believed to be monomorphic in behaviour. This means that the objects used at a particular call site are typically the same type (i.e. most of the time the object being invoked is the same as the last object invoked at the same site.) A dispatch stub takes the type (MethodTable) of the object being invoked and compares it with its cached type, and upon success jumps to its cached target. On x86, this is typically results in a "comparison, conditional failure jump, jump to target" sequence and provides the best performance of any stub. If a stub's type comparison fails, it jumps to its corresponding resolve stub (see below).
+### ディスパッチスタブ
 
-One dispatch stub is created for each unique <_token_,_type_> tuple, but only lazily when a call site's lookup stub is invoked.
+ディスパッチスタブ（Dispatch Stub）は、動作としてコールサイトがモノモーフィック（非多態）であると考えられる場合に使用されます。つまり、特定のコールサイトで使用されるオブジェクトが典型的には同じ型であるということです（つまり、ほとんどの場合に、呼び出し先のオブジェクトが、前回同じサイトで呼び出されたオブジェクトと同一ということです）。ディスパッチスタブは呼び出し先のオブジェクトの型（メソッドテーブル）を受け取り、キャッシュしている型と比較し、一致した場合にはキャッシュしたターゲットにジャンプします。x86において、これは一般的に「比較、条件判定失敗時ジャンプ、ターゲットへのジャンプ」というシーケンスになり、あらゆるスタブにおいて最良のパフォーマンスを提供します。スタブの型判定に失敗した場合、対応する解決スタブ（後述）にジャンプします。
 
-### Resolve Stubs
+一意な<_トークン_, _型_> タプルそれぞれに対して1つのディスパッチスタブが作成されますが、コールサイトの検索スタブが呼び出されたときにのみレイジーに作成されます。
 
-Polymorphic call sites are handled by resolve stubs. These stubs use the key pair <_token_, _type_> to resolve the target in a global cache, where _token_ is known at JIT time and _type_ is determined at call time. If the global cache does not contain a match, then the final step of the resolve stub is to call the generic resolver and jump to the returned target. Since the generic resolver will insert the <_token_, _type_, _target_> tuple into the cache, a subsequent call with the same <_token_,_ type_> tuple will successfully find the target in the cache.
+### 解決スタブ
 
-When a dispatch stub fails frequently enough, the call site is deemed to be polymorphic and the resolve stub will back patch the call site to point directly to the resolve stub to avoid the overhead of a consistently failing dispatch stub. At sync points (currently the end of a GC), polymorphic sites will be randomly promoted back to monomorphic call sites under the assumption that the polymorphic attribute of a call site is usually temporary. If this assumption is incorrect for any particular call site, it will quickly trigger a backpatch to demote it to polymorphic again.
+ポリモーフィック（多態）なコールサイトは、解決スタブ（Resolve Stub）によって処理されます。解決スタブは、<_トークン_, _型_>というキーのペアを使用して、グローバルキャッシュ内のターゲットを解決します。ここで、_トークン_ はJIT時に既知であり、_型_ は呼び出し時に決定されます。グローバルキャッシュに一致するものがない場合、解決スタブの最終ステップは汎用リゾルバーを呼び出し、そこから返されたターゲットにジャンプします。汎用リゾルバーが <_トークン_, _型_, _ターゲット_> というタプルをグローバルキャッシュに挿入することになるため、同じ<_トークン_, _型_>タプルを使用した後続の呼び出しは、グローバルキャッシュでターゲットを見つけられるようになります。
 
-One resolve stub is created per token, but they all use a global cache. A stub-per-token allows for a fast, effective hashing algorithm using a pre-calculated hash derived from the unchanging components of the <_token_, _type_> tuple.
+ディスパッチスタブが一定頻度以上失敗すると、コールサイトはポリモーフィックであると見なされ、継続的なディスパッチスタブの失敗によるオーバーヘッドを避けるために、解決スタブはコールサイトが解決スタブを直接指し示すようにパッチを当てます。コールサイトのポリモーフィック特性は一般的に一時的なものであるという仮定の下、同期ポイント（現在のところGCの終了時）において、ポリモーフィックなコールサイトはランダムにモノモーフィックコールサイトに戻されます。特定のコールサイトについてこの仮定が誤っている場合、再びポリモーフィックに降格する戻しパッチが速やかに起動されます。
 
-### Code Sequences
+トークンごとに1つの解決スタブが作成されますが、解決スタブはすべて1つのグローバルキャッシュを使用します。トークンごとにスタブが存在することで、<_トークン_, _型_>タプルの不変のコンポーネントから事前計算したハッシュを使用して、高速かつ効果的なハッシュ処理アルゴリズムを使用できます。
 
-The former interface virtual table dispatch mechanism results in a code sequence similar to this:
+### コードのシーケンス
 
-![Figure 3](images/virtualstubdispatch-fig3.png)
+先ほどのインターフェイス仮想テーブルディスパッチ機構は、以下のようなコードシーケンスになります。
 
-And the typical stub dispatch sequence is:
+![Figure 3](https://github.com/dotnet/coreclr/blob/master/Documentation/images/virtualstubdispatch-fig3.png)
 
-![Figure 1](images/virtualstubdispatch-fig4.png)
+そして、典型的なスタブディスパッチのシーケンスは以下のとおりです。
 
-where expectedMT, failure and target are constants encoded in the stub.
+![Figure 1](https://github.com/dotnet/coreclr/blob/master/Documentation/images/virtualstubdispatch-fig4.png)
 
-The typical stub sequence has the same number of instructions as the former interface dispatch mechanism, and fewer memory indirections may allow it to execute faster with a smaller working set contribution. It also results in smaller JITed code, since the bulk of the work is in the stub instead of the call site. This is only advantageous if a callsite is rarely invoked. Note that the failure branch is arranged so that x86 branch prediction will follow the success case.
+ここで、expectedMT、failure、targetはスタブにエンコードされた定数値です。
 
-Current State
+典型的なスタブシーケンスの命令数は以前のインターフェイスディスパッチ機構と同じで、メモリ間接が少なくなることによるワーキングセットの使用量が減少するので、実行は高速化されることでしょう。同様に、コールサイトではなくスタブで処理の大半が行われるため、JIT後のコードはより小さくなります。これは、コールサイトがめったに呼び出されない場合の唯一の利点です。x86の分岐予測が成功ケースに従うように失敗分岐が配置されていることに注意してください。
+
+現在の状態
 =============
 
-Currently, VSD is enabled only for interface method calls but not virtual instance method calls. There were several reasons for this:
+現在はVSDはインターフェイスメソッド呼び出しでのみ有効になっており、仮想インスタンスメソッド呼び出しでは有効になっていません。これにはいくつかの理由がありました。
 
-- **Startup:** Startup working set and speed were hindered because of the need to generate a great deal of initial stubs.
-- **Throughput:** While interface dispatches are generally faster with VSD, virtual instance method calls suffer an unacceptable speed degradation.
+- **起動：** 大量の初期スタブを生成する必要があるために、起動時のワーキングセットとスピードの障害となります。
+- **スループット：** インターフェイスディスパッチは、一般的にVSDによって高速化しますが、仮想インスタンスメソッド呼び出しでは許容できないスピードの劣化が発生します。
 
-As a result of disabling VSD for virtual instance method calls, every type has a vtable for virtual instance methods and the implementation table described above is disabled. Dispatch maps are still present to enable interface method dispatching.
+仮想インスタンスメソッド呼び出しでVSDを無効化した結果として、すべての型が仮想インスタンスメソッド用のvtableを保持し、前述の実装テーブルは無効になります。インターフェイスメソッドのディスパッチ処理を有効にするために、ディスパッチマップは存在しています。
 
-Physical Architecture
+物理アーキテクチャ
 =====================
 
-For dispatch token and map implementation details, please see [clr/src/vm/contractImpl.h](https://github.com/dotnet/coreclr/blob/master/src/vm/contractimpl.h) and [clr/src/vm/contractImpl.cpp](https://github.com/dotnet/coreclr/blob/master/src/vm/contractimpl.cpp).
+ディスパッチトークンとディスパッチマップの実装詳細については、[clr/src/vm/contractImpl.h](https://github.com/dotnet/coreclr/blob/master/src/vm/contractimpl.h)と[clr/src/vm/contractImpl.cpp](https://github.com/dotnet/coreclr/blob/master/src/vm/contractimpl.cpp)を参照してください。
 
-For virtual stub dispatch implementation details, please see [clr/src/vm/virtualcallstub.h](https://github.com/dotnet/coreclr/blob/master/src/vm/virtualcallstub.h) and [clr/src/vm/virtualcallstub.cpp](https://github.com/dotnet/coreclr/blob/master/src/vm/virtualcallstub.cpp).
+[clr/src/vm/virtualcallstub.h](https://github.com/dotnet/coreclr/blob/master/src/vm/virtualcallstub.h) and [clr/src/vm/virtualcallstub.cpp](https://github.com/dotnet/coreclr/blob/master/src/vm/virtualcallstub.cpp).
+仮想スタブディスパッチの実装詳細については、[clr/src/vm/virtualcallstub.h](https://github.com/dotnet/coreclr/blob/master/src/vm/virtualcallstub.h)と[clr/src/vm/virtualcallstub.cpp](https://github.com/dotnet/coreclr/blob/master/src/vm/virtualcallstub.cpp)を参照してください。
