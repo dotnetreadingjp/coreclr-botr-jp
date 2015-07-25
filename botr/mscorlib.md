@@ -49,57 +49,57 @@ QCallでは、P/InvokeによってCLRを呼び出すことができます。こ�
 
 FCallには、HCall（Helper Call）と呼ばれる小規模な亜種があります。これは、JITのヘルパーを実装するもので、多次元配列要素へのアクセスや範囲チェックなどを行うためのものです。HCallとFCallの違いは、HCallのメソッドは例外スタックトレース上に出現しない、ということです。
 
-### Choosing between FCall, QCall, P/Invoke, and writing in managed code
+### FCallで書くか、QCallで書くか、P/Invokeで書くか、マネージドコードで書くか
 
-First, remember that you should be writing as much as possible in managed code. You avoid a raft of potential GC hole issues, you get a good debugging experience, and the code is often simpler. It also is preparation for ongoing refactoring of mscorlib into smaller layered fully managed libraries in [corefx](https://github.com/dotnet/corefx/).
+まず、可能な限りマネージドコードで書くべきです。GCの抜け穴問題をあらかた回避でき、まともなデバッグ作業が期待でき、コードは往々にして単純になります。また、これによって、[corefx](https://github.com/dotnet/corefx/)で現在進んでいる、mscorlibを小さい階層的な完全マネージドライブラリとする、リファクタリング作業の準備にもなります。
 
-Reasons to write FCalls in the past generally fell into three camps: missing language features, better performance, or implementing unique interactions with the runtime. C# now has almost every useful language feature that you could get from C++, including unsafe code & stack-allocated buffers, and this eliminates the first two reasons for FCalls. We have ported some parts of the CLR that were heavily reliant on FCalls to managed code in the past (such as Reflection and some Encoding & String operations), and we want to continue this momentum. We may port our number formatting & String comparison code to managed in the future.
+FCallを書く理由は、かつては主に次の3つの集団のどれかに当てはまるものでした。言語機能の不足、より良いパフォーマンス、ランタイムと独自の相互運用の実装です。C#は今や、unsafeコードやスタック アロケーション バッファなどを含む、C++で得られる便利な機能の大半を実現しており、上記理由の最初の2つは排除されました。私たちは以前に、、CLRの一部分をFCall依存からマネージドコードに移植しており（たとえばReflection、EncodingとString操作のいくつか）、この作業は継続して行われていきます。数値のフォーマッティングと文字列比較のコードは、将来的にマネージドに移植されるかもしれません。
 
-If the only reason you're defining a FCall method is to call a native Win32 method, you should be using P/Invoke to call Win32 directly. P/Invoke is the public native method interface, and should be doing everything you need in a correct manner.
+もしあなたがFCallメソッドを定義する理由が、単純にWin32メソッドを呼び出すためであれば、P/Invokeを使用して、直接Win32を呼び出すべきです。P/Invokeはネイティブメソッドの公開されたインターフェースであり、あなたにとって必要な作業を全て適切に行ってくれます。
 
-If you still need to implement a feature inside the runtime, now consider if there is a way to reduce the frequency of transitioning to native code. Can you write the common case in managed, and only call into native for some rare corner cases? You're usually best off keeping as much as possible in managed code.
+もしこれでもまだランタイム内部に機能を実装する必要があるなら、ネイティブコードへの遷移の頻度を可能な限り減らす方法がないか、検討して下さい。共通の処理はマネージドで書けないか、ネイティブを呼び出す必要があるのは一部の重箱の隅のケースだけではないか? 可能な限りマネージドコードで行う方法が多くの場合はあることでしょう。
 
-QCalls are the preferred mechanism going forward. You should only use FCalls when you are "forced" to. This happens when there is common "short path" through the code that is important to optimize. This short path should not be more than a few hundred instructions, cannot allocate GC memory, take locks or throw exceptions (GC_NOTRIGGER, NOTHROWS). In all other circumstances (and especially when you enter a FCall and then simply erect HelperMethodFrame), you should be using QCall.
+以降は、QCallが望ましいメカニズムであることを説明しましょう。FCallはそれを「強制される」場合にのみ使用すべきです。FCallは、最適化の際に重要である、コードの一般的な「短いコードパス」がある場合に発生します。この短いコードパスは、数百命令以上にはせず、GCメモリを確保せず、ロックを確保したり例外を投げたりしないことです (GC_NOTRIGGER, NOTHROWS)。それに当てはまらないなら、いかなる状況下でも（特に、FCallに入って単にHelperMethodFrameを準備するだけでも）、QCallを使用すべきです。
 
-FCalls were specifically designed for short paths of code that must be optimized. They allowed you to take explicit control over when erecting a frame was done.  However it is error prone and is not worth it for many APIs. QCalls are essentially P/Invokes into CLR.
+FCallは、最適化される必要がある短いコードパスのために、特別に設計されています。これを使うと、フレームの準備が完了した時に明示的に制御を渡すことが可能でした。ただし、これは間違いを起こしやすいものであり、多くのAPIにおいては、使用に値しないものです。QCallこそが、本質的に、CLRに特化したP/Invokeです。
 
-As a result, QCalls give you some advantageous marshaling for SafeHandles automatically – your native method just takes a HANDLE type, and can use it without worrying whether someone will free the handle while you are in that method body. The resulting FCall method would need to use a SafeHandleHolder, and may need to protect the SafeHandle, etc. Leveraging the P/Invoke marshaler can avoid this additional plumbing code.
+結局のところ、QCallはSafeHandleを自動的にマーシャリングする際のアドバンテージを与えてくれます - あなたのネイティブメソッドは、HANDLE型を受け取って、メソッド本体の実行中に誰かがそれを解放したりしないか、などと心配することなく、使用することができるようになるのです。FCallメソッドでは、SafeHandleHolderを使用する必要があり、おそらくそのSafeHandle等を保護する必要があるでしょう。P/Invokeのマーシャラーを活用することで、そのような余計なコードを書かずに済むようになるのです。
 
-## QCall Functional Behavior
+## QCallの機能的な振る舞い
 
-QCalls are very much like a normal P/Invoke from mscorlib.dll to CLR. Unlike FCalls, QCalls will marshal all arguments as unmanaged types like a normal P/Invoke. QCall also switch to preemptive GC mode like a normal P/Invoke. These two features should make QCalls easier to write reliably compared to FCalls. QCalls are not prone to GC holes and GC starvation bugs that are common with FCalls.
+QCallは、ほぼ、通常のP/Invokeの、mscorli.dllからCLRを呼び出す版のようなものです。FCallとは異なり、QCallは通常のP/Invokeと同様に、引数を全てアンマネージド型としてマーシャリングします。QCallはまた、通常のP/Invokeと同様に、プリエンプティブGCモードへの切り替えを行います。これらの2つの機能が、QCallがFCallに比べて信頼性の高いコードを書けるようにしています。QCallは、FCallでよく起こる、GCの抜け穴を作り出したり、GC不足のバグを起こすこともありません。
 
-QCalls perform better than FCalls that erect a HelperMethodFrame. The overhead is about 1.4x less compared to FCall w/ HelperMethodFrame overhead on x86 and x64.
+QCallは、HelperMethodFrameを準備するFCallよりも、パフォーマンスが良いです。そのオーバーヘッドは、x86およびx64では、HelperMethodFrameのあるFCallの1.4分の1ですみます。
 
-The preferred types for QCall arguments are primitive types that are efficiently handled by the P/Invoke marshaler (INT32, LPCWSTR, BOOL). Notice that BOOL is the correct boolean flavor for QCall arguments. On the other hand, CLR_BOOL is the correct boolean flavor for FCall arguments.
+QCall引数の望ましい型は。P/Invokeマーシャラーで効率的に扱われるプリミティブ型（INT32、LPCWSTR、BOOL）です。注意すべきは、QCall引数における正しいbooleanのフレーバーはBOOLである、ということです。一方、FCall引数における正しいbooleanのフレーバーはCLR_BOOLとなります。
 
-The pointers to common unmanaged EE structures should be wrapped into handle types. This is to make the managed implementation type safe and avoid falling into unsafe C# everywhere. See AssemblyHandle in [vm\qcall.h][qcall] for an example.
+一般的なアンマネージドEE構造体へのポインタは、ハンドル型でラップするべきです。これによって、マネージド実装が型安全になり、至るところでunsafeなC#を書くような事態が回避できます。例として、[vm\qcall.h][qcall] に含まれるAssemblyHandleを見てみて下さい。
 
 [qcall]: https://github.com/dotnet/coreclr/blob/master/src/vm/qcall.h
 
-There is a way to pass a raw object references in and out of QCalls. It is done by wrapping a pointer to a local variable in a handle. It is intentionally cumbersome and should be avoided if reasonably possible. See the StringHandleOnStack in the example below. Returning objects, especially strings, from QCalls is the only common pattern where passing the raw objects is widely acceptable. (For reasoning on why this set of restrictions helps make QCalls less prone to GC holes, read the "GC Holes, FCall, and QCall" section below.)
+生のオブジェクト参照をQCallの入出力に渡すことは可能です。ポインターをラップしてハンドルとしてローカル変数にすれば良いのです。これは意図的に中途半端に設計されたものであり、可能な限り避けるべきやり方です。以下の例に示すStringHandleOnStackを見て下さい。QCallからの戻り値となるオブジェクトとして、特に文字列のみが、生のオブジェクトとして渡される、というのが広く容認されるパターンです。（なぜこの制約の集合が、QCallがGCの抜け穴を作らないことに繋がるのか、その理由付けについては、「GCの抜け穴とFCallとQCall」の節を読んでください。）
 
-### QCall Example - Managed Part
+### QCallの使用例 - マネージド部分
 
-Do not replicate the comments into your actual QCall implementation. This is for illustrative purposes.
+以下のコメントをあなたの実際のQCall実装に使い回さないでください。これは説明のために入れたものです。
 
 	class Foo
 	{
-	    // All QCalls should have the following DllImport and
-	    // SuppressUnmanagedCodeSecurity attributes
+	    // 全てのQCallは、以下のDllImportと
+	    // SuppressUnmanagedCodeSecurity 属性を使用すべきです。
 	    [DllImport(JitHelpers.QCall, CharSet = CharSet.Unicode)]
 	    [SuppressUnmanagedCodeSecurity]
-	    // QCalls should always be static extern.
+	    // QCallsは常にstatic externである必要があります。
 	    private static extern bool Bar(int flags, string inString, StringHandleOnStack retString);
 
-	    // Many QCalls have a thin managed wrapper around them to expose them to
-	    // the world in more meaningful way.
+	    // 多くのQCallには、それを意味のあるやり方で世界に公開するための、
+	    // 薄いマネージドラッパーがあります。
 	    public string Bar(int flags)
 	    {
 	        string retString = null;
 
-	        // The strings are returned from QCalls by taking address
-	        // of a local variable using JitHelpers.GetStringHandle method
+	        // QCallでは、文字列は、ローカル変数のアドレスを 
+	        // JitHelpers.GetStringHandleメソッドに渡して返されます。
 	        if (!Bar(flags, this.Id, JitHelpers.GetStringHandle(ref retString)))
 	            FatalError();
 
@@ -107,59 +107,59 @@ Do not replicate the comments into your actual QCall implementation. This is for
 	    }
 	}
 
-### QCall Example - Unmanaged Part
+### QCallの使用例 - アンマネージド部分
 
-Do not replicate the comments into your actual QCall implementation.
+以下のコメントをあなたの実際のQCall実装に使い回さないでください。
 
-The QCall entrypoint has to be registered in tables in [vm\ecalllist.h][ecalllist] using QCFuncEntry macro. See "Registering your QCall or FCall Method" below.
+このQCallのエントリポイントは、[vm\ecalllist.h][ecalllist]で、QCFuncEntryマクロを使って、テーブルに登録されています。以下の「QCallあるいはFCallのメソッドを登録する」を見て下さい。
 
 [ecalllist]: https://github.com/dotnet/coreclr/blob/master/src/vm/ecalllist.h
 
 	class FooNative
 	{
 	public:
-	    // All QCalls should be static and should be tagged with QCALLTYPE
+	    // 全てのQCallは、staticで、QCALLTYPEでタグ付けされるべきです。
 	    static
 	    BOOL QCALLTYPE Bar(int flags, LPCWSTR wszString, QCall::StringHandleOnStack retString);
 	};
 
 	BOOL QCALLTYPE FooNative::Bar(int flags, LPCWSTR wszString, QCall::StringHandleOnStack retString)
 	{
-	    // All QCalls should have QCALL_CONTRACT.
-	    // It is alias for THROWS; GC_TRIGGERS; MODE_PREEMPTIVE; SO_TOLERANT.
+	    // 全てのQCallsはQCALL_CONTRACTとなるべきです。これは、THROWS; 
+	    // GC_TRIGGERS; MODE_PREEMPTIVE; SO_TOLERANT のエイリアスです。
 	    QCALL_CONTRACT;
 
-	    // Optionally, use QCALL_CHECK instead and the expanded form of the contract
-	    // if you want to specify preconditions:
+	    // あるいは、特別な条件を指定したい場合は、QCALL_CHECKを代わりに使用して、
+	    // 拡張されたコントラクトの形式を使用します:
 	    // CONTRACTL {
 	    //     QCALL_CHECK;
 	    //     PRECONDITION(wszString != NULL);
 	    // } CONTRACTL_END;
 
-	    // The only line between QCALL_CONTRACT and BEGIN_QCALL
-	    // should be the return value declaration if there is one.
+	    // QCALL_CONTRACTとBEGIN_QCALLの行の間に含まれるべきは、戻り値宣言のみです。
+	    // （戻り値がある場合）
 	    BOOL retVal = FALSE;
 
-	    // The body has to be enclosed in BEGIN_QCALL/END_QCALL macro. It is necessary
-	    // to make the exception handling work.
+	    // メソッド本体は、BEGIN_QCALLとEND_QCALL のマクロの中に囲まれるべきです。
+	    // これは、例外処理を適切に行うために必要です。
 	    BEGIN_QCALL;
 
-	    // Validate arguments if necessary and throw exceptions.
-	    // There is no convention currently on whether the argument validation should be
-	    // done in managed or unmanaged code.
+	    // 必要に応じて、引数を検証し、例外を投げます。
+	    // 引数の検証がマネージドでなされるべきか、アンマネージドでなされるべきか、
+	    // については、現在のところ合意はありません。
 	    if (flags != 0)
 	        COMPlusThrow(kArgumentException, L"InvalidFlags");
 
-	    // No need to worry about GC moving strings passed into QCall.
-	    // Marshalling pins them for us.
+	    // QCallに渡した文字列がGCされる心配はありません。
+	    // マーシャリングの過程でピン止めされます。
 	    printf("%S", wszString);
 
-	    // This is most the efficient way to return strings back
-	    // to managed code. No need to use StringBuilder.
+	    // 戻り値の文字列をマネージドコードに返す、最も効率の良いやり方はこれです。
+	    // StringBuilderを使う必要はありません。
 	    retString.Set(L"Hello");
 
-	    // You can not return from inside of BEGIN_QCALL/END_QCALL.
-	    // The return value has to be passed out in helper variable.
+	    // BEGIN_QCALLとEND_QCALLの間でreturnすることはできません。
+	    // 戻り値はヘルパー変数を経由して渡されなければなりません。
 	    retVal = TRUE;
 
 	    END_QCALL;
@@ -167,7 +167,7 @@ The QCall entrypoint has to be registered in tables in [vm\ecalllist.h][ecalllis
 	    return retVal;
 	}
 
-## FCall Functional Behavior
+## FCallの機能的な振る舞い
 
 FCalls allow more flexibility in terms of passing object references around, with a higher code complexity and more opportunities to hang yourself. Additionally, FCall methods must either erect a helper method frame along their common code paths, or for any FCall of non-trivial length, explicitly poll for whether a garbage collection must occur. Failing to do so will lead to starvation issues if managed code repeatedly calls the FCall method in a tight loop, because FCalls execute while the thread only allows the GC to run in a cooperative manner.
 
