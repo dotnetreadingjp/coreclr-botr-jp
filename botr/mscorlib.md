@@ -194,28 +194,28 @@ OBJECTREFクラスは、そのオブジェクトをcheckedビルドで参照解�
 
 ### x86のFCallエピローグ ウォーカー
 
-The managed stack walker needs to be able to find its way from FCalls. It is relative easy on newer platforms that define conventions for stack unwinding as part of the ABI. The stack unwinding conventions are not defined by ABI for x86. The runtime works around it by implementing a epilog walker. The epilog walker computes the FCall return address and callee save registers by simulating the FCall execution. This imposes limits on what constructs are allowed in the FCall implementation.
+マネージドスタック ウォーカーは、FCallからの戻り先を知ることができる必要があります。これは、ABIの一部としてスタックのアンワインド（巻き戻し）のための規約を定義している、新し目のプラットフォームでは、比較的簡単です。スタック アンワインドの規約は、x86では定義されていません。このランタイムでは、エピローグ ウォーカーを実装することで、この問題に対応しています。このエピローグ ウォーカーは、FCallの戻り先アドレスと呼び出し先の保存レジスターを、FCall実行をシミュレートした結果をもとに算出します。これによって、FCall実装で許容される処理要素(construct)について、制限が課されることになります。
 
-Complex constructs like stack allocated objects with destructors or exception handling in the FCall implementation may confuse the epilog walker. It leads to GC holes or crashes during stack walking. There is no exact list of what constructs should be avoided to prevent this class of bugs. An FCall implementation that is fine one day may break with the next C++ compiler update. We depend on stress runs & code coverage to find bugs in this area.
+スタック上に確保されたデストラクター付きのオブジェクトや、FCall実装内部での例外操作のような、複雑な処理要素は、このエピローグ ウォーカーを混乱させることがあります。GCの抜け穴や、スタックウォーキング過程でのクラッシュを引き起こします。この種のバグを起こさないために、どのような処理要素が避けられるべきか、という正確なリストは、ありません。ある時点で問題のなかったFCall実装が、次のC++コンパイラーのアップデートによって壊れる可能性もあります。私たちは、この部分におけるバグを、ストレス ランとコード カバレッジによって、発見しています。
 
-Setting a breakpoint inside an FCall implementation may confuse the epilog walker. It leads to an "Invalid breakpoint in a helpermethod frame epilog" assert inside [vm\i386\gmsx86.cpp](https://github.com/dotnet/coreclr/blob/master/src/vm/i386/gmsx86.cpp).
+FCall実装の内部にブレークポイントを設定すると、エピローグ ウォーカーは混乱し、[vm\i386\gmsx86.cpp](https://github.com/dotnet/coreclr/blob/master/src/vm/i386/gmsx86.cpp)の中で、「ヘルパーメソッド フレームのエピローグの中に無効なブレークポイントがあります」("Invalid breakpoint in a helpermethod frame epilog")というアサーション エラーを引き起こします。
 
-### FCall Example – Managed Part
+### FCallの例 – マネージド部分
 
-Here's a real-world example from the String class:
+これはStringクラスから抜粋した実利用の例です:
 
 	public partial sealed class String
 	{
-	    // Replaces all instances of oldChar with newChar.
+	    // oldCharの全てのインスタンスをnewCharに置換します。
 	    [MethodImplAttribute(MethodImplOptions.InternalCall)]
 	    public extern String Replace (char oldChar, char newChar);
 	}
 
-### FCall Example – Native Part
+### FCallの例 – ネイティブ部分
 
-The FCall entrypoint has to be registered in tables in [vm\ecalllist.h][ecalllist] using FCFuncEntry macro. See "Registering your QCall or FCall Method".
+FCallのエントリーポイントは、FCFuncEntryマクロを用いて[vm\ecalllist.h][ecalllist]のテーブルに登録されなければなりません。「QCallおよびFCallのメソッドを登録する」の節を参照してください。
 
-Notice how oldBuffer and newBuffer (interior pointers into String instances) are re-fetched after allocating memory. Also, this method is an instance method in managed code, with the "this" parameter passed as the first argument. We use StringObject* as the argument type, then copy it into a STRINGREF so we get some error checking when we use it.
+oldBufferとnewBuffer（Stringインスタンスへの内部ポインタ）がメモリ確保の後で再取得されている部分に着目して下さい。また、このメソッドはマネージドコードにおけるインスタンスメソッドであり、"this"パラメーターが最初の引数として渡されていることも要注目です。StringObject*を引数型に使用して、それをSTRINGREFに渡すことで、これを使用する時に多少のエラーチェックが実行されることになります。
 
 	FCIMPL3(LPVOID, COMString::Replace, StringObject* thisRefUNSAFE, CLR_CHAR oldChar, CLR_CHAR newChar)
 	{
@@ -233,21 +233,21 @@ Notice how oldBuffer and newBuffer (interior pointers into String instances) are
 	        FCThrowRes(kNullReferenceException, L"NullReference_This");
 	    }
 
-	    [... Removed some uninteresting code here for illustrative purposes...]
+	    [... 説明に無関係なコードは省略します...]
 
 	    HELPER_METHOD_FRAME_BEGIN_RET_ATTRIB_2(Frame::FRAME_ATTR_RETURNOBJ, newString, thisRef);
 
-	    //Get the length and allocate a new String
-	    //We will definitely do an allocation here.
+	    //長さを取得して新しいStringを確保します。
+	    //この中で確実にメモリ確保を行います。
 	    newString = NewString(length);
 
-	    //After allocation, thisRef may have moved
+	    //メモリ確保の後、thisRefは移動するかもしれません。
 	    oldBuffer = thisRef->GetBuffer();
 
-	    //Get the buffers in both of the Strings.
+	    //バッファを両方のStringで取得します。
 	    newBuffer = newString->GetBuffer();
 
-	    //Copy the characters, doing the replacement as we go.
+	    //コピーしながら、置換処理を行います。
 	    for (int i=0; i<firstFoundIndex; i++) {
 	        newBuffer[i]=oldBuffer[i];
 	    }
@@ -263,18 +263,19 @@ Notice how oldBuffer and newBuffer (interior pointers into String instances) are
 	FCIMPLEND
 
 
-## Registering your QCall or FCall Method
+## QCallとFCallのメソッドを登録する
 
-The CLR must know the name of your QCall and FCall methods, both in terms of the managed class & method names, as well as which native methods to call. That is done in [ecalllist.h][ecalllist], with two arrays. The first array maps namespace & class names to an array of function elements. That array of function elements then maps individual method names & signatures to function pointers.
+CLRは各QCallとFCallのメソッドの名前を、マネージドクラスとメソッドの名前、そして呼び出すべきネイティブメソッド、の双方のために、知っていなければなりません。これは[ecalllist.h][ecalllist]で、2つの配列によって行われています。
+最初の配列は、ネームスペースおよびクラス名を、関数群(function elements)の配列にマッピングされます。この関数群は、そのメソッド名およびシグネチャーから、関数ポインタにマッピングされます。
 
-Say we defined an FCall method for String.Replace(char, char), in the example above. First, we need to ensure that we have an array of function elements for the String class.
+私たちが、上記の例にあるような、String.Replace(char, char) のFCallメソッドを定義するとしましょう。まず、私たちは、このStringクラスに対応する関数群の配列を有していなければなりません。
 
 	// Note these have to remain sorted by name:namespace pair (Assert will wack you if you
 	    ...
 	    FCClassElement("String", "System", gStringFuncs)
 	    ...
 
-Second, we must then ensure that gStringFuncs contains a proper entry for Replace. Note that if a method name has multiple overloads (such as String.Replace(String, String)), then we can specify a signature:
+次に、gStringFuncsがReplaceのための適切なエントリーを含むようにしなければなりません。もしひとつのメソッド名に複数のオーバーロード（String.Replace(String, String)など）が含まれていたら、シグネチャーを指定しなければなりません。
 
 	FCFuncStart(gStringFuncs)
 	    ...
@@ -284,24 +285,26 @@ Second, we must then ensure that gStringFuncs contains a proper entry for Replac
 	    ...
 	FCFuncEnd()
 
-There is a parallel QCFuncElement macro.
+同様に、QCFuncElementマクロも存在します。
 
-## Naming convention
+## 命名規約
 
-Try to use normal name (e.g. no "_", "n" or "native" prefix) for all FCalls and QCalls. It is not good idea to embed that the function is implemented in VM in the name of the function for the following reasons:
+FCallでもQCallでも、普通の名称を使用してください（"_"や"n"や"native"みたいなプレフィックスは不要です）。VMの中でその名前の関数を実装するのは、以下の理由から良いアイディアではありません:
 
-- There are directly exposed public FCalls. These FCalls have to follow the naming convention for public APIs.
-- The implementation of functions do move between CLR and mscorlib.dll. It is painful to change the name of the function in all call sites when this happens.
+- それらはパブリックなFCallとして開示されます。そのようなFCallは、パブリックAPIの命名規約に従わなければなりません。
+- 関数の実装はCLRとmscorlib.dllの間で移動します。その場合、全ての呼び出し側でこの関数の名前を変更するのは、面倒な作業です。
 
-When necessary you can use "Internal" prefix to disambiguate the name of the FCall or QCall from public entry point (e.g. the public entry point does error checking and then calls shared worker function with exactly same signature). This is no different from how you would deal with this situation in pure managed code in BCL.
+必要があれば、"Internal"　プレフィックスを使用して、パブリックなエントリポイントとFCallあるいはQCallを区別することができます（例えば、パブリックなエントリポイントではエラーチェックを行い、その後全く同じシグネチャーをもつ共通のワーカー関数を呼び出す場合）。これは、BCLの純粋なマネージドコードにおける場合と、何も違いはありません。
 
-# Types with a Managed/Unmanaged Duality
+# 型におけるマネージド/アンマネージドの一対一対応性
 
-Certain managed types must have a representation available in both managed & native code. You could ask whether the canonical definition of a type is in managed code or native code within the CLR, but the answer doesn't matter – the key thing is they must both be identical. This will allow the CLR's native code to access fields within a managed object in a very fast, easy to use manner. There is a more complex way of using essentially the CLR's equivalent of Reflection over MethodTables & FieldDescs to retrieve field values, but this probably doesn't perform as well as you'd like, and it isn't very usable. For commonly used types, it makes sense to declare a data structure in native code & attempt to keep the two in sync.
+<!-- ここでdualityを双極性って書いても意味分からんでしょう。-->
 
-The CLR provides a binder for this purpose. After you define your managed & native classes, you should provide some clues to the binder to help ensure that the field offsets remain the same, to quickly spot when someone accidentally adds a field to only one definition of a type.
+ある種のマネージド型は、マネージドとネイティブの両方のコードに、その表現が存在しなければなりません。その型の厳密な定義がマネージドコードにあるのか、それともCLRのネイティブコードにあるのか、と尋ねることは出来ますが、いずれにしろその問答には意味はありません - 重要なのは、それらが同一でなければならない、ということです。同一であれば、CLRのネイティブコードにおけるフィールドへの、マネージドコードからのアクセスは、非常に高速で適切なものになります。CLRにおけるリフレクションに相当する存在と言えるMethodTableとFieldDescを使用して、フィールドの値を取得する、複雑な方法もありますが、これではおそらく期待されるようなパフォーマンスを得ることは出来ず、使いにくいものです。共通に使用される型については、そのデータ構造をネイティブコードで定義しておいて、双方を同一にするようにしておくのが合理的です。
 
-In [mscorlib.h][mscorlib.h], you can use macros ending in "_U" to describe a type, the name of fields in managed code, and the name of fields in a corresponding native data structure. Additionally, you can specify a list of methods, and reference them by name when you attempt to call them later.
+CLRは、この目的に合わせたバインダーを提供しています。マネージドとネイティブのクラスを定義したら、そのバインダーに幾らかの手がかりを提供して、フィールド オフセットが同一であることを保証し、もし誰かがフィールドをどちらかの型定義だけに追加した場合に、迅速に教えてくれます。
+
+[mscorlib.h][mscorlib.h]の中では、"_U" で終わるマクロを使用して、型、マネージドコードにおけるフィールド名群、そしてそれに対応するネイティブデータ構造におけるフィールド名群、を記述できます。さらに、メソッドのリストを定義して、それらを後で呼び出す時にそれらを名前で参照することもできます。
 
 [mscorlib.h]: https://github.com/dotnet/coreclr/blob/master/src/vm/mscorlib.h
 
@@ -316,13 +319,13 @@ In [mscorlib.h][mscorlib.h], you can use macros ending in "_U" to describe a typ
 	DEFINE_METHOD(SAFE_HANDLE,          DISPOSE_BOOL,           Dispose,                    IM_Bool_RetVoid)
 
 
-Then, you can use the REF<T> template to create a type name like SAFEHANDLEREF. All the error checking from OBJECTREF is built into the REF<T> macro, and you can freely dereference this SAFEHANDLEREF & use fields off of it in native code. You still must GC protect these references.
+そうしたら、REF<T>テンプレートを使用して、SAFEHANDLEREFのような型名を作成できます。OBJECTREFにおけるエラーチェックは、REF<T>マクロに組み込まれており、このSAFEHANDLEREFを好きなように参照解除して、ネイティブコード上でそのフィールドを使用することができます。ここでも、それらの参照はGC保護しなければなりません。
 
-# Calling Into Managed Code From Native
+# ネイティブからマネージドコードを呼び出す
 
-Clearly there are places where the CLR must call into managed code from native. For this purpose, we have added a MethodDescCallSite class to handle a lot of plumbing for you. Conceptually, all you need to do is find the MethodDesc\* for the method you want to call, find a managed object for the "this" pointer (if you're calling an instance method), pass in an array of arguments, and deal with the return value. Internally, you'll need to potentially toggle your thread's state to allow the GC to run in preemptive mode, etc.
+CLRがネイティブコードからマネージドコードを呼びださなければならない場面が存在することは明白です。この目的に合わせて、私たちはMethodDescCallSiteクラスを追加して、面倒事の多くを扱ってくれるようにしました。コンセプトとしては、あなたがやるべきことは、呼び出したいメソッドのMethodDesc\*を探して、（インスタンスメソッドを呼び出す場合は）"this"ポインターが示すマネージド オブジェクトを探して、引数の配列を渡して、戻り値を処理する、ということです。内部的には、GCがプリエンプティブモードでも実行できるようにスレッドの状態を切り替える、等の作業が必要になることでしょう。
 
-Here's a simplified example. Note how this instance uses the binder described in the previous section to call SafeHandle's virtual ReleaseHandle method.
+以下は単純化された例です。このインスタンスが前節で説明したバインダーを使用してSafeHandleのReleaseHandleメソッドを呼び出しているところに注目です。
 
 	void SafeHandle::RunReleaseMethod(SafeHandle* psh)
 	{
@@ -346,21 +349,21 @@ Here's a simplified example. Note how this instance uses the binder described in
 	    GCPROTECT_END();
 	}
 
-# Interactions with Other Subsystems
+# 他のサブシステムとの協調動作
 
-## Debugger
+## デバッガー
 
-One limitation of FCalls today is that you cannot easily debug both managed code and FCalls easily in Visual Studio's Interop (or mixed mode) debugging. Setting a breakpoint today in an FCall and debugging with Interop debugging just doesn't work. This most likely won't be fixed.
+現在のFCallの制限のひとつは、マネージドコードとFCallの両方をVisual StudioのInterop（あるいはmixed modeの）デバッグ機能で、簡単にデバッグできない、ということです。今のところ、Interopデバッグの際にFCall中にブレークポイントを設定しても、単純に機能しません。この問題はおそらく解決しないでしょう。
 
-# Physical Architecture
+# 実コードのアーキテクチャ
 
-When the CLR starts up, mscorlib is loaded by a method called LoadBaseSystemClasses. Here, the base data types & other similar classes (like Exception) are loaded, and appropriate global pointers are set up to refer to mscorlib's types.
+CLRが起動する時、mscorlibはLoadBaseSystemClassesというメソッドによってロードされます。ここで、基本データ型と他の同様のクラス（Exceptionなど）がロードされ、適切なグローバルポインターがmscorlibの型を指すようセットアップされます。
 
-For FCalls, look in [fcall.h][fcall] for infrastructure, and [ecalllist.h][ecalllist] to properly inform the runtime about your FCall method.
+FCallsについては、インフラストラクチャーについては[fcall.h][fcall]を、ランタイムにあなたのFCallメソッドを適切に通知する方法については [ecalllist.h][ecalllist]を、それぞれ参照して下さい。
 
-For QCalls, look in [qcall.h][qcall] for associated infrastructure, and [ecalllist.h][ecalllist] to properly inform the runtime about your QCall method.
+QCallsについては、関連するインフラストラクチャーについては[qcall.h][qcall]を、ランタイムにあなたのQCallメソッドを適切に通知する方法については[ecalllist.h][ecalllist]を、それぞれ参照して下さい。
 
-More general infrastructure and some native type definitions can be found in [object.h][object.h]. The binder uses mscorlib.h to associate managed & native classes.
+より一般的なインフラストラクチャーおよびネイティブ型定義のいくつかについては、[object.h][object.h]で見つかります。バインダーは mscorlib.h を使用して、マネージドとネイティブのクラスを関連付けます。
 
 [object.h]: https://github.com/dotnet/coreclr/blob/master/src/vm/object.h
 
