@@ -57,77 +57,102 @@ ThreadオブジェクトはすべてThreadStore（こちらも[threads.h][thread
 
 デバッガーでは、"!Threads"というSOS拡張コマンドを使用して、ThreadStore内のThreadオブジェクトをすべて列挙することができます。
 
-Thread Lifetimes
+スレッドの生存期間
 ================
 
-A マネージドスレッド is created in the following situations:
+マネージドスレッドは次の状況で生成されます。
 
-1. マネージドコード explicitly asks the CLR to create a new thread via System.Threading.Thread.
-2. The CLR creates the マネージドスレッド directly (see "special threads" below).
-3. ネイティブコード calls マネージドコード on a ネイティブスレッド which is not yet associated with a マネージドスレッド (via "reverse p/invoke" or COM interop).
-4. A managed process starts (invoking its Main method on the process' Main thread).
+1. マネージドコードがSystem.Threading.Threadを使って新しいスレッドを生成するようにCLRに明示的に要求するとき。
+2. CLRが特定のマネージドスレッドを直接生成するとき（下記の「特別なスレッド」を参照のこと）。
+3. まだマネージドスレッドに対応付けられていないネイティブスレッド上で、ネイティブコードが（「逆P/Invoke」またはCOM相互運用を使用して）マネージドコードを呼び出すとき。
+4. あるマネージドプロセスが開始するとき（プロセスのメインスレッドがMainメソッドを呼び出します）。
 
-In cases #1 and #2, the CLR is responsible for creating a ネイティブスレッド to back the マネージドスレッド. This is not done until the thread is actually _started_. In such cases, the ネイティブスレッド is "owned" by the CLR; the CLR is responsible for the ネイティブスレッド's lifetime. In these cases, the CLR is aware of the existence of the thread by virtue of the fact that the CLR created it in the first place.
+上記の #1 と #2 の場合は、CLRにはマネージドスレッドの背後にあるネイティブスレッドを生成する責任があります。
+これはマネージドスレッドが実際に _開始_ するまでは実施されません。
+開始された後は、生成されたネイティブスレッドはCLRが「所有」し、CLRはネイティブスレッドの生存期間について責任があります。
+これらの場合では、CLRは生成されたスレッドの存在を認識しています。そもそもスレッドを生成したのはCLRだという事実があるからです。
 
-In cases #3 and #4, the ネイティブスレッド already existed prior to the creation of the マネージドスレッド, and is owned by code external to the CLR. The CLR is not responsible for the ネイティブスレッド's lifetime. The CLR becomes aware of these threads the first time they attempt to call マネージドコード.
+上記の #3 と #4 の場合は、マネージドスレッドが生成される前からネイティブスレッドは存在しており、CLRの外にあるコードによって所有されています。
+CLRはそのネイティブスレッドの生存期間について責任がありません。
+CLRはネイティブスレッドがマネージドコードを呼び出そうとした時に初めてそれらのスレッドの存在を認識します。
 
-When a ネイティブスレッド dies, the CLR is notified via its DllMain function. This happens inside of the OS "loader lock," so there is little that can be done (safely) while processing this notification. So rather than destroying the data structures associated with the マネージドスレッド, the thread is simply marked as "dead" and signals the finalizer thread to run. The finalizer thread then sweeps through the threads in the ThreadStore and destroys any that are both dead _and_ unreachable via マネージドコード.
+ネイティブスレッドが終了した時はDllMain関数を通じてCLRに通知されます。これはOSの「ローダーロック」の内側で起こるため、この通知を処理する際に（安全に）できることはほとんどありません。ですので、終了するスレッドは、マネージドスレッドに関連づいたデータ構造について、破棄するのではなく単に「終了」とマークした上で、ファイナライザースレッドに開始のシグナルを送ります。それを受けてファイナライザースレッドはThreadStore内のスレッドを一通り眺め、終了していて _かつ_ マネージドコードから到達不可能なスレッドがあれば破棄します。
 
-Suspension
+一時中断
 ==========
 
-The CLR must be able to find all references to managed objects in order to perform a GC. マネージドコード is constantly accessing the GC heap, and manipulating references stored on the stack and in registers. The CLR must ensure that all マネージドスレッドs are stopped (so they aren't modifying the heap) to safely and reliably find all managed objects. It only stops at _safe point_, when registers and stack locations can be inspected for live references.
+CLRがGCを実行するためにはすべてのマネージドオブジェクトを見つけ出せる必要があります。
+マネージドコードは定常的にGCヒープにアクセスして、スタックやレジスタに保持されている参照を操作しています。
+CLRはすべてのマネージドスレッドが停止していることを保証しなければなりません。
+それによって（ヒープが変更されないので）、安全に確実にすべてのマネージドオブジェクトを見つけ出すことができます。
+スレッドは _セーフポイント_ でのみ停止します。その時に、生存している参照を探すためにレジスタとスタック位置を調査できます。
 
-Another way of putting this is that the GC heap, and every thread's stack and register state, is "shared state," accessed by multiple threads. As with most shared state, some sort of "lock" is required to protect it. マネージドコード must hold this lock while accessing the heap, and can only release the lock at safe points.
+別の方法は、GCヒープ、および全スレッドのスタックとレジスターの状態が、複数のスレッドからアクセスされる「共有状態」になることです。
+世のほとんどの共有状態と同様に、状態を守るにはある種の「ロック」が要求されます。
+マネージドコードはヒープにアクセスする間そのロックを保持しなければなりませんし、ロックを開放できるのはセーフポイントに達したときだけです。
 
-The CLR refers to this "lock" as the thread's "GC mode." A thread which is in "cooperative mode" holds its lock; it must "cooperate" with the GC (by releasing the lock) in order for a GC to proceed. A thread which is in "preemptive" mode does not hold its lock – the GC may proceed "preemptively" because the thread is known to not be accessing the GC heap.
+CLRはそのロックをスレッドの「GCモード」として参照します。
+「協調（cooperative）モード」のスレッドは自身のロックを保持します。
+GCを進行させるためには、そのスレッドは（ロックを解放することで）GCと「協調」しなければなりません。
+「割り込み（preemptive）モード」のスレッドは自身のロックを保持しません――GCは「割り込み」によって進行する可能性があります。なぜならそのスレッドはGCヒープにアクセスしていないことが分かっているからです。
 
-A GC may only proceed when all マネージドスレッドs are in "preemptive" mode (not holding the lock). The process of moving all マネージドスレッドs to preemptive mode is known as "GC suspension" or "suspending the 実行 Engine (EE)."
+GCは全マネージドスレッドが「割り込み」モードにある（ロックを保持していない）時だけ進行します。全マネージドスレッドを割り込みモードに移行するプロセスは「GC一時中断」または「実行エンジン（EE）の中断」と呼ばれています。
 
-A naïve implementation of this "lock" would be for each マネージドスレッド to actually acquire and release a real lock around each access to the GC heap. Then the GC would simply attempt to acquire the lock on each thread; once it had acquired all threads' locks, it would be safe to perform the GC.
+この「ロック」をナイーブに実装するとすれば、個々のマネージドスレッドがGCヒープにアクセスするたびに本物のロックを実際に獲得・解放するというものになるでしょう。
+その場合GCは単にそれぞれのスレッドについてロックを獲得しようと試みるだけでよくなります。
+全スレッドのロックを獲得してしまえば、GCを実行しても安全ということになります。
 
-However, this naïve approach is unsatisfactory for two reasons. First, it would require マネージドコード to spend a lot of time acquiring and releasing the lock (or at least checking whether the GC was attempting to acquire the lock – known as "GC polling.") Second, it would require the JIT to emit "GC info" describing the layout of the stack and registers for every point in JIT'd code; this information would consume large amounts of memory.
+しかしながら、このナイーブな手法は2つの理由で満足のいくものではありません。
+1つは、マネージドコードがロックを獲得・解放するために（少なくとも、GCがロックを獲得しようとしていないかチェックする、いわゆる「GCポーリング」に）多くの時間を使わないとならないことです。もう1つは、JITが「GC情報」を出力しないとならないことです。それはJIT化されたコードのあらゆる点におけるスタックとレジスターのレイアウトを表すものです。この情報は多量のメモリを必要とするでしょう。
 
-We refined this naïve approach by separating JIT'd マネージドコード into "partially interruptible" and "fully interruptible" code. In partially interruptible code, the only safe points are calls to other methods, and explicit "GC poll" locations where the JIT emits code to check whether a GC is pending. GC info need only be emitted for these locations. In fully interruptible code, every 命令 is a safe point, and the JIT emits GC info for every 命令 – but it does not emit GC polls. Instead, fully interruptible code may be "interrupted" by hijacking the thread (a process which is discussed later in this document). The JIT chooses whether to emit fully- or partially-interruptible code based on heuristics to find the best tradeoff between code quality, size of the GC info, and GC suspension latency.
+私たちはこのナイーブなアプローチを洗練させ、JIT化されたマネージコードを「部分的に割り込み可能」なコードと「完全に割り込み可能」なコードの2つに分離しました。
+部分的に割り込み可能なコードでは、セーフポイントは他メソッドの呼び出しと、明示的な「GCポーリング」の場所だけとなります。
+そしてそこでは、JITはGCが延期されているかチェックするコードを出力します。GC情報はそれらの場所においてだけ出力されればよくなります。
+完全に割り込み可能なコードでは、すべての命令がセーフポイントであり、JITはすべての命令についてGC情報を出力します――ただしJITはGCポーリングを出力しません。
+その代わり、完全に割り込み可能なコードはスレッドのハイジャック（本ドキュメントの後ろの方で説明します）によって「割り込まれる」可能性があります。
+完全に割り込み可能なコードと部分的に割り込み可能なコードのどちらを出力するかをJITが判断する際にはヒューリスティックスが用いられます。
+そのヒューリスティックスはコード品質、GC情報のサイズ、GC一時中断の遅延時間について最善のトレードオフを発見するものです。
 
-Given the above, there are three fundamental operations to define: entering cooperative mode, leaving cooperative mode, and suspending the EE.
+ここまでを踏まえて、3つの基礎的な処理が定義されています。協調モードへの突入、協調モードからの脱出、そして実行エンジン（EE）の中断です。
 
-Entering Cooperative Mode
+協調モードへの突入
 -------------------------
 
-A thread enters cooperative mode by calling Thread::DisablePreemptiveGC. This acquires the "lock" for the current thread, as follows:
+Thread::DisablePreemptiveGCを呼ぶことでスレッドは協調モードに入ります。これは現在のスレッドの「ロック」を獲得します。詳細は以下の通りです。
 
-1. If a GC is in progress (the GC holds the lock) then block until the GC is complete.
-2. Mark the thread as being in cooperative mode. No GC may proceed until the thread reenters preemptive mode.
+1. もしGCが処理中（GCがロックを保持している）なら、GCが完了するまでブロックします。
+2. スレッドを協調モードにあるとマークします。スレッドが再び割り込みモードに入るまでGCは進行しません。
 
-These two steps proceed as if they were atomic.
+これらの2つのステップはアトミックに進行します。
 
-Entering Preemptive Mode
+協調モードからの脱出
 ------------------------
 
-A thread enters preemptive mode (releases the lock) by calling Thread::EnablePreemptiveGC. This simply marks the thread as no longer being in cooperative mode, and informs the GC thread that it may be able to proceed.
+Thread::EnablePreemptiveGCを呼ぶことでスレッドは割り込みモードに入ります（ロックを解放します）。
+これは単に、スレッドが協調モードではなくなったとマークして、GCスレッドに対して進行してもよいと伝えるだけです。
 
-Suspending the EE
+実行エンジン（EE）の中断
 -----------------
 
-When a GC needs to occur, the first step is to suspend the EE. This is done by GCHeap::SuspendEE, which proceeds as follows:
+GCが稼働しようとするときの最初のステップはEEを中断することです。これはGCHeap::SuspendEEで実行されます。プロセスは以下の通りです。
 
-1. Set a global flag (g\_fTrapReturningThreads) to indicate that a GC is in progress. Any threads that attempt to enter cooperative mode will block until the GC is complete.
-2. Find all threads currently executing in cooperative mode. For each such thread, attempt to hijack the thread and force it to leave cooperative mode.
-3. Repeat until no threads are running in cooperative mode.
+1. グローバルなフラグ（g\_fTrapReturningThreads）を立てて、GCが動作中であることを示します。協調モードに入ろうとするスレッドはすべて、GCが完了するまでブロックされます。
+2. 現在協調モードで動作しているスレッドをすべて探し出します。見つかったスレッドのそれぞれについて、スレッドをハイジャックして協調モードから脱出させようとします。
+3. 協調モードで動作するスレッドがなくなるまで繰り返します。
 
-Hijacking
+ハイジャック
 ---------
 
-Hijacking for GC suspension is done by Thread::SysSuspendForGC. This method attempts to force any マネージドスレッド that is currently running in cooperative mode, to leave cooperative mode at a "safe point." It does this by enumerating all マネージドスレッドs (walking the ThreadStore), and for each マネージドスレッド currently running in cooperative mode.
+Thread::SysSuspendForGCによってGC一時中断のためのハイジャックが起こります。このメソッドは現在協調モードで動作しているすべてのスレッドについて、「セーフポイント」で協調モードから抜けるように強制しようとします。
+これは（ThreadStoreを調査して）すべてのマネージドスレッドを列挙したうえで、現在協調モードで動作しているスレッドごとに以下のことを行います。
 
-1. Suspend the underlying ネイティブスレッド. This is done with the Win32 SuspendThread API. This API forcibly stops the thread from running, at some random point in its 実行 (not necessarily a safe point).
-2. Get the current CONTEXT for the thread, via GetThreadContext. This is an OS concept; CONTEXT represents the current register state of the thread. This allows us to inspect its 命令ポインター, and thus determine what type of code it is currently executing.
-3. Check again if the thread is in cooperative mode, as it may have already left cooperative mode before it could be suspended. If so, the thread is in dangerous territory: the thread may be executing arbitrary ネイティブコード, and must be resumed immediately to avoid deadlocks.
-4. Check if the thread is running マネージドコード. It is possible that it is executing native VM code in cooperative mode (see Synchronization, below), in which case the thread must be immediately resumed as in the previous step.
-5. Now the thread is suspended in マネージドコード. Depending on whether that code is fully- or partially-interruptable, one of the following is performed:
-  * If fully interruptable, it is safe to perform a GC at any point, since the thread is, by definition, at a safe point. It is reasonable to leave the thread suspended at this point (because it's safe) but various historical OS bugs prevent this from working, because the CONTEXT retrieved earlier may be corrupt). Instead, the thread's 命令ポインター is overwritten, redirecting it to a stub that will capture a more complete CONTEXT, leave cooperative mode, wait for the GC to complete, reenter cooperative mode, and restore the thread to its previous state.
-  * If partially-interruptable, the thread is, by definition, not at a safe point. However, the caller will be at a safe point (method transition). Using that knowledge, the CLR "hijacks" the top-most stack frame's return address (physically overwrite that location on the stack) with a stub similar to the one used for fully-interruptable code. When the method returns, it will no longer return to its actual caller, but rather to the stub (the method may also perform a GC poll, inserted by the JIT, before that point, which will cause it to leave cooperative mode and undo the hijack).
+1. 裏側にあるネイティブスレッドを一時停止します。これにはWin32のSuspendThread APIが用いられます。このAPIはスレッドの実行を強制的に止めます。停止地点は実行中のランダムな場所です（セーフポイントである必要はありません）。
+2. GetThreadContextでスレッドの現在のコンテキストを取得します。これはOSの概念で、コンテキストとはスレッドの現在のレジスター状態を表すものです。これによってスレッドの命令ポインターを調査できるので、したがって現在実行中のコードの種類を判別できます。
+3. スレッドが協調モードか再確認します。そのスレッドが一時停止できるようになる前にすでに協調モードから抜け出ているかもしれないからです。もしそうなら、そのスレッドは危険な領域にいます。スレッドは任意のネイティブコードを実行している可能性があり、デッドロックを避けるには即座に再開されなければなりません。
+4. スレッドがマネージドコードを実行しているかチェックします。可能性としてあり得るのは、スレッドが協調モードでネイティブのVMコードを実行しているという状況です（下記の「同期」の節を参照のこと）。その場合には上のステップ同様、スレッドは即座に再開されなければなりません。
+5. このステップまで来れば、スレッドはマネージドコード内で中断しています。コードが完全に割り込み可能なのか部分的に割り込み可能なのかによって、次のどちらかが実行されます。
+  * 完全に割り込み可能な場合は、どの地点でGCを実行しても安全です。なぜならスレッドは、定義上、セーフポイントにいるからです。このままスレッドを一時停止させることも（安全であれば）考えられますが、OSには多くの歴史的なバグがあるのでそのように動作させることはできません。すでに取得しているコンテキストが壊れる可能性があるためです。その代わりに、スレッドの命令ポインターは上書きされ、より完全なコンテキストをキャプチャするスタブにリダイレクトされます。それから協調モードから出て、GCが完了するのを待ち、再度協調モードに入り、スレッドを以前の状態に復元します。
+  * 部分的に割り込み可能な場合は、スレッドは、定義上、セーフポイントにはいません。しかし、呼び出し元は（メソッドへの推移で）セーフポイントへと移動します。それを踏まえて、CLRは最上位のスタックフレームのリターンアドレスを「ハイジャック」（スタック上のその場所を物理的に上書き）し、完全に割り込み可能な場合と同様のスタブへと置き換えます。メソッドから制御が戻るときには、もはや実際の呼び出し元へと戻ることはなく、その代わりにスタブへと移動します（その地点より前に、メソッドはJITによって挿入されたGCポーリングを実行するかもしれません。その場合は協調モードから抜け、ハイジャックは取り消されることになります）。
 
 ThreadAbort / AppDomain-Unload
 ==============================
