@@ -78,7 +78,7 @@ CLRはネイティブスレッドがマネージドコードを呼び出そう�
 
 ネイティブスレッドが終了した時はDllMain関数を通じてCLRに通知されます。これはOSの「ローダーロック」の内側で起こるため、この通知を処理する際に（安全に）できることはほとんどありません。ですので、終了するスレッドは、マネージドスレッドに関連づいたデータ構造について、破棄するのではなく単に「終了」とマークした上で、ファイナライザースレッドに開始のシグナルを送ります。それを受けてファイナライザースレッドはThreadStore内のスレッドを一通り眺め、終了していて _かつ_ マネージドコードから到達不可能なスレッドがあれば破棄します。
 
-一時中断
+サスペンド（一時中断）
 ==========
 
 CLRがGCを実行するためにはすべてのマネージドオブジェクトを見つけ出せる必要があります。
@@ -96,7 +96,7 @@ CLRはそのロックをスレッドの「GCモード」として参照します
 GCを進行させるためには、そのスレッドは（ロックを解放することで）GCと「協調」しなければなりません。
 「割り込み（preemptive）モード」のスレッドは自身のロックを保持しません――GCは「割り込み」によって進行する可能性があります。なぜならそのスレッドはGCヒープにアクセスしていないことが分かっているからです。
 
-GCは全マネージドスレッドが「割り込み」モードにある（ロックを保持していない）時だけ進行します。全マネージドスレッドを割り込みモードに移行するプロセスは「GC一時中断」または「実行エンジン（EE）の中断」と呼ばれています。
+GCは全マネージドスレッドが「割り込み」モードにある（ロックを保持していない）時だけ進行します。全マネージドスレッドを割り込みモードに移行するプロセスは「GCサスペンド」または「実行エンジン（EE）の中断」と呼ばれています。
 
 この「ロック」をナイーブに実装するとすれば、個々のマネージドスレッドがGCヒープにアクセスするたびに本物のロックを実際に獲得・解放するというものになるでしょう。
 その場合GCは単にそれぞれのスレッドについてロックを獲得しようと試みるだけでよくなります。
@@ -111,7 +111,7 @@ GCは全マネージドスレッドが「割り込み」モードにある（ロ
 完全に割り込み可能なコードでは、すべての命令がセーフポイントであり、JITはすべての命令についてGC情報を出力します――ただしJITはGCポーリングを出力しません。
 その代わり、完全に割り込み可能なコードはスレッドのハイジャック（本ドキュメントの後ろの方で説明します）によって「割り込まれる」可能性があります。
 完全に割り込み可能なコードと部分的に割り込み可能なコードのどちらを出力するかをJITが判断する際にはヒューリスティックスが用いられます。
-そのヒューリスティックスはコード品質、GC情報のサイズ、GC一時中断の遅延時間について最善のトレードオフを発見するものです。
+そのヒューリスティックスはコード品質、GC情報のサイズ、GCサスペンドの遅延時間について最善のトレードオフを発見するものです。
 
 ここまでを踏まえて、3つの基礎的な処理が定義されています。協調モードへの突入、協調モードからの脱出、そして実行エンジン（EE）の中断です。
 
@@ -143,7 +143,7 @@ GCが稼働しようとするときの最初のステップはEEを中断する�
 ハイジャック
 ---------
 
-Thread::SysSuspendForGCによってGC一時中断のためのハイジャックが起こります。このメソッドは現在協調モードで動作しているすべてのスレッドについて、「セーフポイント」で協調モードから抜けるように強制しようとします。
+Thread::SysSuspendForGCによってGCサスペンドのためのハイジャックが起こります。このメソッドは現在協調モードで動作しているすべてのスレッドについて、「セーフポイント」で協調モードから抜けるように強制しようとします。
 これは（ThreadStoreを調査して）すべてのマネージドスレッドを列挙したうえで、現在協調モードで動作しているスレッドごとに以下のことを行います。
 
 1. 裏側にあるネイティブスレッドを一時停止します。これにはWin32のSuspendThread APIが用いられます。このAPIはスレッドの実行を強制的に止めます。停止地点は実行中のランダムな場所です（セーフポイントである必要はありません）。
@@ -154,104 +154,104 @@ Thread::SysSuspendForGCによってGC一時中断のためのハイジャック�
   * 完全に割り込み可能な場合は、どの地点でGCを実行しても安全です。なぜならスレッドは、定義上、セーフポイントにいるからです。このままスレッドを一時停止させることも（安全であれば）考えられますが、OSには多くの歴史的なバグがあるのでそのように動作させることはできません。すでに取得しているコンテキストが壊れる可能性があるためです。その代わりに、スレッドの命令ポインターは上書きされ、より完全なコンテキストをキャプチャするスタブにリダイレクトされます。それから協調モードから出て、GCが完了するのを待ち、再度協調モードに入り、スレッドを以前の状態に復元します。
   * 部分的に割り込み可能な場合は、スレッドは、定義上、セーフポイントにはいません。しかし、呼び出し元は（メソッドへの推移で）セーフポイントへと移動します。それを踏まえて、CLRは最上位のスタックフレームのリターンアドレスを「ハイジャック」（スタック上のその場所を物理的に上書き）し、完全に割り込み可能な場合と同様のスタブへと置き換えます。メソッドから制御が戻るときには、もはや実際の呼び出し元へと戻ることはなく、その代わりにスタブへと移動します（その地点より前に、メソッドはJITによって挿入されたGCポーリングを実行するかもしれません。その場合は協調モードから抜け、ハイジャックは取り消されることになります）。
 
-ThreadAbort / AppDomain-Unload
+ThreadAbort / AppDomainのアンロード
 ==============================
 
-In order to unload an AppDomain, the CLR must ensure that no thread is running in that AppDomain. To accomplish this, all マネージドスレッドs are enumerated, and "abort" any threads which have stack frames belonging to the AppDomain being unloaded. A ThreadAbortException is "injected" into the running thread, which  causes the thread to unwind (executing backout code along the way) until it is no longer executing in the AppDomain, at which point the ThreadAbortException is translated into an AppDomainUnloaded exception.
+AppDomainをアンロードするためには、CLRはそのAppDomainの中でスレッドが実行されていないことを確認する必要があります。これを達成するために、マネージドスレッドをすべて列挙し、アンロードされるAppDomainに属するスタックフレームを持つスレッドをすべて「中止」します。実行中のスレッドにThreadAbortExceptionが「注入」され、それによってスレッドは巻き戻されます（実行経路に沿って取り消しコードを実行します）。スレッドがAppDomain内で実行されなくなった時点で、ThreadAbortExceptionはAppDomainUnloadedExceptionに変換されます。
 
-ThreadAbortException is a special type of exception. It can be caught by user code, but the CLR ensures that the exception will be rethrown after the user's exception handler is executed. Thus ThreadAbortException is sometimes referred to as "uncatchable," though this is not strictly true.
+ThreadAbortExceptionは特殊なタイプの例外です。これはユーザーコードによってキャッチされるかもしれませんが、ユーザーの例外ハンドラが実行された後で、例外が再スローされることをCLRが保証します。そのためThreadAbortExceptionは「キャッチできない」と呼ばれることもありますが、これは厳密には正しくありません。
 
-A ThreadAbortException is typically 'thrown' by simply setting a bit on the マネージドスレッド marking it as "aborting." This bit is checked by various parts of the CLR (most notably, every return from a p/invoke) and often times setting this bit is all that is needed to get the thread aborted in a timely manner.
+ThreadAbortExceptionは、典型的には、単にマネージドスレッドのあるビットを設定して「強制終了中(aborting)」とマーキングすることで「スロー」されます。このビットは、CLRのさまざまな部分で（最も顕著なのは、すべてのP/Invokeから復帰するたびに）チェックされます。また、多くの場合、スレッドを適時に中止するために必要なことはこのビットを設定することだけです。
 
-However, if the thread is, for example, executing a long-running managed loop, it may never check this bit. To get such a thread to abort faster, the thread i "hijacked" and forced to raise a ThreadAbortException. This hijacking is done in the same way as GC suspension, except that the stubs that the thread is redirected to will cause a ThreadAbortException to be raised, rather than waiting for a GC to complete.
+ただし、例えばスレッドがマネージドループを長い間実行している場合などでは、このビットがチェックされない可能性があります。このようなスレッドをより速く強制終了するために、スレッドは「ハイジャック」され、ThreadAbortExceptionが強制的に投げられます。このハイジャックはGCのサスペンドと同じように行われますが、スレッドがリダイレクトされるスタブはGCの完了を待つのではなく、ThreadAbortExceptionを発生させる点が異なります。
 
-This hijacking means that a ThreadAbortException can be raised at essentially any arbitrary point in マネージドコード. This makes it extremely difficult for マネージドコード to deal successfully with a ThreadAbortException. It is therefore unwise to use this mechanism for any purpose other than AppDomain-Unload, which ensures that any state corrupted by the ThreadAbort will be cleaned up along with the AppDomain.
+このハイジャックは、マネージドコードでは本質的に任意の時点でThreadAbortExceptionが投げられうることを意味します。このことで、マネージドコードがThreadAbortExceptionに正しく対処するのは非常に困難になっています。したがって、AppDomainのアンロード以外の目的のためにこの機構を使用することは賢明ではありません。AppDomainのアンロードであれば、ThreadAbortによって破損した任意の状態がアプリケーションドメインと一緒にクリーンアップされることが確実になります。
 
-Synchronization: Managed
+同期: マネージドの場合
 ========================
 
-マネージドコード has access to many synchronization primitives, collected within the System.Threading namespace. These include wrappers for native OS primitives like Mutex, Event, and Semaphore objects, as well as some abstractions such as Barriers and SpinLocks. However, the primary synchronization mechanism used by most マネージドコード is System.Threading.Monitor, which provides a high-performance locking facility on _any managed object_, and additionally provides "condition variable" semantics for signaling changes in the state protected by a lock.
+マネージドコードは同期プリミティブへのアクセスをいくつも持っていて、それらはSystem.Threading名前空間に集められています。Mutex、Event、SemaphoeオブジェクトのようなネイティブOSプリミティブのラッパーもあれば、BarrierやSpinLockといった抽象もあります。しかし、ほとんどのマネージドコードで使用されている一番の同期メカニズムはSystem.Threading.Monitorです。これは、  _任意のマネージドオブジェクト_ に高性能なロック機能を提供します。また、ロックによって保護された状態の変化を通知する「条件変数」のセマンティクスも提供します。
 
-Monitor is implemented as a "hybrid lock;" it has features of both a spin-lock and a kernel-based lock like a Mutex. The idea is that most locks are held only briefly, so it takes less time to simply spin-wait for the lock to be released, than it would to make a call into the kernel to block the thread. It is important not to waste CPU cycles spinning, so if the lock has not been acquired after a brief period of spinning, the implementation falls back to blocking in the kernel.
+モニタは、「ハイブリッドロック」として実装されています。すなわち、スピンロックと、ミューテックスのようなカーネルベース​​ロックの、両方の機能を備えています。これは次のような考えによるものです。つまり、ほとんどのロックは短い時間しか保持されないため、ロックの解放を待つには、カーネルを呼び出してスレッドをブロックするよりも、単なるスピンで待機する方が時間がかからないということです。重要なのはCPUサイクルを無駄に回さないことですので、短期間のスピンでロックが取得されなかった場合、実装はカーネルでのブロッキングにフォールバックします。
 
-Because any object may potentially be used as a lock/condition variable, every object must have a location in which to store the lock information. This is done with "object headers" and "sync blocks."
+任意のオブジェクトを潜在的にロック/条件変数として使用できるので、すべてのオブジェクトはロック情報を格納する場所を持っている必要があります。これは「オブジェクトヘッダ」と「同期ブロック」によって実現されています。
 
-The object header is a machine-word-sized field that precedes every managed object. It is used for many purposes, such as storing the object's hash code. One such purpose is holding the object's lock state. If more per-object data is needed than will fit in the object header, we "inflate" the object by creating a "sync block."
+オブジェクトヘッダは、すべてのマネージドオブジェクトの先頭にある、マシンワードサイズの1つのフィールドです。これは多くの目的に使用されます。たとえばオブジェクトのハッシュコードを格納しておくなどです。そのような目的の一つに、オブジェクトのロック状態を保持することがあります。オブジェクト単位のデータが多くなってオブジェクトヘッダに収まらなくなった場合は、「同期ブロック」を作成してオブジェクトを「膨張」させます。
 
-Sync blocks are stored in the Sync Block Table, and are addressed by sync block indexes. Each object with an associated sync block has the index of that index in the object's object header.
+同期ブロックは、同期ブロックテーブルに格納され、同期ブロックインデックスから参照されます。同期ブロックと関連づいたオブジェクトは、それぞれのオブジェクトのオブジェクトヘッダに同期ブロックインデックスのインデックスを持っています。
 
-The details of object headers and sync blocks are defined in [syncblk.h][syncblk.h]/[.cpp][syncblk.cpp].
+オブジェクトヘッダーと同期ブロックの詳細は、 [syncblk.h][syncblk.h]/[.cpp][syncblk.cpp] に定義されています。
 
 [syncblk.h]: https://github.com/dotnet/coreclr/blob/master/src/vm/syncblk.h
 [syncblk.cpp]: https://github.com/dotnet/coreclr/blob/master/src/vm/syncblk.cpp
 
-If there is room on the object header, Monitor stores the マネージドスレッド ID of the thread that currently holds the lock on the object (or zero (0) if no thread holds the lock). Acquiring the lock in this case is a simple matter of spin-waiting until the object header's thread ID is zero, and then atomically setting it to the current thread's マネージドスレッド ID.
+オブジェクトヘッダに余裕がある間は、Monitorはロックを現時点で保持しているスレッドのマネージドスレッドID（ロックを保持しているスレッドがない場合はゼロ（0））をオブジェクトに保存します。この場合、ロックを取得するのは単純なことです。オブジェクトヘッダのスレッドIDがゼロになるまでスピン待ちした後で、現在のスレッドのマネージドスレッドIDをアトミックにセットするだけです。
 
-If the lock cannot be acquired in this manner after some number of spins, or the object header is already being used for other purposes, a sync block must be created for the object. This has additional data, including an event that can be used to block the current thread, allowing us to stop spinning and efficiently wait for the lock to be released.
+このような形で何度かスピンしてもロックを取得できなかった場合や、またはオブジェクトのヘッダが既に他の目的に使われていた場合は、そのオブジェクトには同期ブロックを作成しなければなりません。同期ブロックはいくつかのデータを追加で含んでいます。たとえば現在のスレッドをブロックするために使用することができるイベントです。これによって、スピンを止め、ロックが解除されるのを効率的に待機できます。
 
-An object that is used as a condition variable (via Monitor.Wait and Monitor.Pulse) must always be inflated, as there is not enough room in the sync block to hold the required state.
+（Monitor.WaitとMonitor.Pulseで）条件変数として使用されるオブジェクトは常に膨張させる必要があります。同期ブロックには必要な状態を保持するための十分なスペースがないからです。
 
-Synchronization: Native
+同期: ネイティブの場合
 =======================
 
-The native portion of the CLR must also be aware of threading, as it will be invoked by マネージドコード on multiple threads. This requires native synchronization mechanisms, such as locks, events, etc.
+CLRのネイティブ部も同様にスレッド処理を認識する必要があります。それは複数のスレッド上のマネージドコードから呼び出されるためです。よってロックやイベントなどのネイティブな同期機構が必要です。
 
-The ITaskHost API allows a host to override many aspects of マネージドスレッドing, including thread creation, destruction, and synchronization. The ability of a host to override native synchronization means that VM code can generally not use native synchronization primitives (Critical Sections, Mutexes, Events, etc.) directly, but rather must use the VM's wrappers over these.
+ITaskHost APIを使うと、ホストはスレッドの作成、破棄、および同期を含むマネージドスレッドの多くの側面を上書きすることができます。ホストがネイティブ同期を上書きできるということがどういう意味を持つかというと、一般的にVMコードはネイティブの同期プリミティブ（クリティカルセクション、ミューテックス、イベントなど）を直接使用することはできず、その代わりこれらに対するVMのラッパーを使用しなければならないということです。
 
-Additionally, as described above, GC suspension is a special kind of "lock" that affects nearly every aspect of the CLR. ネイティブコード in the VM may enter "cooperative" mode if it must manipulate GC heap objects, and thus the "GC suspension lock" becomes one of the most important synchronization mechanisms in native VM code, as well as managed.
+さらに、上述したようにGCサスペンドは特殊な「ロック」であり、CLRのあらゆる側面に影響を与えます。VMのネイティブコードは、GCヒープのオブジェクトを操作する必要がある場合に「協調」モードに入る可能性があります。したがって、「GCサスペンドロック」は、マネージドの場合と同様に、ネイティブVMコードにおいても最も重要な同期機構の一つとなります。
 
-The major synchronization mechanisms used in native VM code are the GC mode, and Crst.
+ネイティブVMコードで使用される主な同期メカニズムは、GCモードとCrstです。
 
-GC Mode
+GCモード
 -------
 
-As discussed above, all マネージドコード runs in cooperative mode, because it may manipulate the GC heap. Generally, ネイティブコード does not touch managed objects, and thus runs in preemptive mode. But some ネイティブコード in the VM must access the GC heap, and thus must run in cooperative mode.
+上述したように、すべてのマネージドコードは協調モードで実行されます。それはGCヒープを操作する可能性があるためです。一般的に、ネイティブコードはマネージドオブジェクトに触らないので、割り込みモードで実行されています。しかし、VM内のいくつかのネイティブコードはGCヒープにアクセスする必要があるため、協調モードで実行する必要があります。
 
-ネイティブコード generally does not manipulate the GC mode directly, but rather uses two macros: GCX\_COOP and GCX\_PREEMP.  These enter the desired mode, and erect "holders" to cause the thread to revert to the previous mode when the scope is exited.
+一般的に、ネイティブコードはGCモードを直接操作するのではなく、GCX\_COOPとGCX\_PREEMPの二つのマクロを使用します。これらのマクロは指定のモードに入ります。そして、スコープが終了した時に「所有者」にスレッドを元のモードに戻させます。
 
-It is important to understand that GCX\_COOP effectively acquires a lock on the GC heap. No GC may proceed while the thread is in cooperative mode. And ネイティブコード cannot be "hijacked" as is done for マネージドコード, so the thread will remain in cooperative mode until it explicitly switches back to preemptive mode.
+GCX\_COOPがGCヒープのロックを効率的に獲得することを理解しておいてください。スレッドが協調モードにある間は、GCは進行しないでしょう。そしてネイティブコードは、マネージドコードのように「ハイジャック」することはできません。よって、スレッドは明示的に割り込みモードに切り替えるまでは協調モードのままです。
 
-Thus entering cooperative mode in ネイティブコード is discouraged. In cases where  cooperative mode must be entered, it should be kept to as short a time as possible. The thread should not be blocked in this mode, and in particular cannot generally acquire locks safely.
+したがって、ネイティブコードでは協調モードに入ることは推奨されません。どうしても協調モードに入らなければならない場合には、できるかぎり短時間に抑えるべきです。スレッドは、協調モードにある間はブロックすべきではありません。特に、一般的にはロックを安全に取得することができません。
 
-Similarly, GCX\_PREEMP potentially _releases_ a lock that had been held by the thread. Great care must be taken to ensure that all GC references are properly protected before entering preemptive mode.
+同様に、GCX\_PREEMPは、スレッドによって保持されていたロックを _解放する_ 可能性があります 。割り込みモードに入る前には細心の注意を払って、すべてのGC参照が適切に保護されるようにする必要があります。
 
-The [Rules of the Code](../coding-guidelines/clr-code-guide.md) document describes the disciplines needed to ensure safety around GC mode switches.
+[コードの規則](../coding-guidelines/clr-code-guide.md)に関するドキュメントでは、GCモードを切り替える際の安全を確保するために必要な規律を説明しています。
 
 Crst
 ----
 
-Just as Monitor is the preferred locking mechanism for マネージドコード, Crst is the preferred mechanism for VM code. Like Monitor, Crst is a hybrid lock that is aware of hosts and GC modes. Crst also implements deadlock avoidance via "lock leveling," described in the [Crst Leveling chapter of the BotR](../coding-guidelines/clr-code-guide.md#entering-and-leaving-crsts).
+マネージドコードのための好ましいロック機構はモニターでしたが、それと同様に、VMコードに適したメカニズムがCrstです。モニターと同じようにCrstもハイブリッドロックで、ホストやGCモードを認識します。Crstも「ロックの平準化」によるデッドロック回避を実装しています。[BotRのCrstレベリングのチャプター](../coding-guidelines/clr-code-guide.md#entering-and-leaving-crsts)でそのことが説明されています。
 
-It is generally illegal to acquire a Crst while in cooperative mode, though exceptions are made where absolutely necessary.
+協調モードでCrstを取得することは一般的にはやってはいけないことですが、どうしても必要な箇所には例外事項が作られています。
 
-Special Threads
+特別なスレッド
 ===============
 
-In addition to managing threads created by マネージドコード, the CLR creates several "special" threads for its own use.
+CLRは、マネージドコードによって作成されたスレッドを管理するだけでなく、いくつかの 「特別」なスレッドを作成して自分自身が使用します。
 
-Finalizer Thread
+ファイナライザースレッド
 ----------------
 
-This thread is created in every process that runs マネージドコード. When the GC determines that a finalizable object is no longer reachable, it places that object on a finalization queue. At the end of a GC, the finalizer thread is signaled to process all finalizers currently in this queue. Each object is then dequeued, one by one, and its finalizer is executed.
+このスレッドは、マネージドコードを実行するすべてのプロセスで作成されます。ファイナライズ可能なオブジェクトがもはや到達可能でないとGCが判断した場合には、そのオブジェクトをファイナライズキューに配置します。GCが終了する時にはファイナライザースレッドに通知され、現在このキューに入っているすべてのオブジェクトのファイナライザーが処理されます。各オブジェクトは、一つずつキューから取り出されてファイナライザーが実行されます。
 
-This thread is also used to perform various CLR-internal housekeeping tasks, and to wait for notifications of some external events (such as a low-memory condition, which signals the GC to collect more aggressively). See GCHeap::FinalizerThreadStart for the details.
+このスレッドは、CLR内部の様々な維持管理タスクを実行するのにも使われますし、何らかの外部イベントの通知を待つためにも使われます。（たとえば、メモリ不足状態が通知され、GCがより積極的に回収する合図となるなどです。）詳細については、GCHeap :: FinalizerThreadStartを参照してください。
 
-GC Threads
+GCスレッド
 ----------
 
-When running in "concurrent" or "server" modes, the GC creates one or more background threads to perform various stages of garbage collection in parallel. These threads are wholly owned and managed by the GC, and never run マネージドコード.
+GCを「コンカレント」または「サーバ」モードで実行している場合、GCは1つ以上のバックグラウンドスレッドを作成し、ガベージコレクションの様々な段階を並列に実行します。これらのスレッドはすべてGCに所有・管理され、マネージドコードを実行することはありません。
 
-Debugger Thread
+デバッガーのスレッド
 ---------------
 
-The CLR maintains a single ネイティブスレッド in each managed process, which performs various tasks on behalf of attached managed debuggers.
+CLRは、すべてのマネージドプロセスにそれぞれ一つのネイティブスレッドを保持しています。そのスレッドは、接続されるマネージドデバッガーのために様々なタスクを実行します。
 
-AppDomain-Unload Thread
+AppDomainのアンロードスレッド
 -----------------------
 
-This thread is responsible for unloading AppDomains. This is done on a separate, CLR-internal thread, rather than the thread that requests the AD-unload, to a) provide guaranteed stack space for the unload logic, and b) allow the thread that requested the unload to be unwound out of the AD, if needed.
+このスレッドはアプリケーションドメインをアンロードする責任があります。これは、AppDominをアンロードするよう要求したスレッドではなく、CLR内部のある独立したスレッドで行われます。それには2つの理由があります。a) アンロード・ロジックのための保証されたスタック空間を提供するためと、b) アンロードを要求し​​たスレッドを、必要に応じてAppDomainの外にほどくことができるようにするためです。
 
-ThreadPool Threads
+ThreadPoolのスレッド
 ------------------
 
-The CLR's ThreadPool maintains a collection of マネージドスレッドs for executing user "work items."  These マネージドスレッドs are bound to ネイティブスレッドs owned by the ThreadPool. The ThreadPool also maintains a small number of ネイティブスレッドs to handle functions like "thread injection," timers, and "registered waits."
+CLRのThreadPoolは、ユーザーの「作業項目」を実行するために、マネージドスレッドのコレクションを保持しています。これらのマネージドスレッドはThreadPoolが所有するネイティブスレッドに結びついています。ThreadPoolは、少数のネイティブスレッドを別途保持しています。それらは、「スレッド注入」や、タイマーや、「登録されている待機動作」などの機能を処理するために使われます。
