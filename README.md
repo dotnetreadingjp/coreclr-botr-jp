@@ -13,7 +13,7 @@
 - CLRスレッディング概要 [原文](https://github.com/dotnet/coreclr/blob/master/Documentation/botr/threading.md) [日本語訳](botr/threading.md)
 - RyuJIT Overview [原文](https://github.com/dotnet/coreclr/blob/master/Documentation/botr/ryujit-overview.md) [日本語訳](botr/ryujit-overview.md)
 - 型システム概要 [原文](https://github.com/dotnet/coreclr/blob/master/Documentation/botr/type-system.md) [日本語訳](botr/type-system.md)
-- Type Loader [原文](https://github.com/dotnet/coreclr/blob/master/Documentation/botr/type-loader.md) [日本語訳](botr/type-loader.md)
+- タイプローダーの設計 [原文](https://github.com/dotnet/coreclr/blob/master/Documentation/botr/type-loader.md) [日本語訳](botr/type-loader.md)
 - Method Descriptor [原文](https://github.com/dotnet/coreclr/blob/master/Documentation/botr/method-descriptor.md) [日本語訳](botr/method-descriptor.md)
 - 仮想スタブディスパッチ [原文](https://github.com/dotnet/coreclr/blob/master/Documentation/botr/virtual-stub-dispatch.md) [日本語訳](botr/virtual-stub-dispatch.md)
 - CLRのスタックウォーキング [原文](https://github.com/dotnet/coreclr/blob/master/Documentation/botr/stackwalking.md) [日本語訳](botr/stackwalking.md)
