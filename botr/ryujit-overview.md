@@ -8,7 +8,7 @@ RyuJITは、AMD64用.NETランタイムの次世代ジャスト イン タイム
 RyuJITの主な設計上の考慮事項は以下の通りです:
 
 * 以前のJIT、特にx86(jit32)およびx64(jit64)との高度な互換性の維持
-* コードの最適化、レジスター アロケーション<!-- technical termであることを含意するためにあえてカタカナで残しておく -->、コード生成器を通じた、良好なランタイムパフォーマンスのサポートと有効化
+* コードの最適化、レジスター アロケーション <!-- technical termであることを含意するためにあえてカタカナで残しておく --> 、コード生成器を通じた、良好なランタイムパフォーマンスのサポートと有効化
 * 概ねリニアオーダーである最適化および変換による、良好なスループットの保証 - 特に、（データフローなどの）分析の追跡対象変数を制限することで、本来的に超リニアになる（訳注: つまり、過度に変数追跡を行わないことで、時間のかかり過ぎる最適化を防ぐ）
 * JITアーキテクチャが、さまざまなターゲットと利用シナリオをサポートするような設計であることを保証
 
@@ -22,32 +22,31 @@ RyuJITは.NETランタイム用の実行時コンパイルサービスを提供�
   * `compileMethod` – JITのメイン エントリーポイントです。EEはこれに `ICorJitInfo` オブジェクトと"info"を渡します。"info"には、IL情報、メソッドのヘッダー、そして各種の有用な断片情報が含まれます。このメソッドはコードへのポインター、サイズ、追加のGC、EHおよび（オプションで）デバッグ情報を返します。
   * `getVersionIdentifier` は、JIT/EEインターフェースのバージョニングを規定する仕組みです。JITとEEの間には、識別情報となるひとつのGUIDがあります。
   * `getMaxIntrinsicSIMDVectorLength` は、このJITコンパイラーがサポートできる最大SIMDベクター長を、EEに伝達するためのものです。
-* `ICorJitInfo` – EEが実装するインターフェースです。この中には、JITコンパイラーが、メタデータ トークンをルックアップしたり、型シグネチャーを調べて回ったり、フィールドやvtableのオフセットを計算したり、メソッド エントリーポイントを探索したり、文字列リテラルを構築したり、といった作業を行うための、数多くのメソッドが定義されています。このインターフェースの大部分は
- [src/inc/corinfo.h](https://github.com/dotnet/coreclr/blob/master/src/inc/corinfo.h)で提議されている `ICorJitDynamicInfo`から継承されています。実装は [src/vm/jitinterface.cpp](https://github.com/dotnet/coreclr/blob/master/src/vm/jitinterface.cpp)で定義（原文ママ）されています。
+* `ICorJitInfo` – EEが実装するインターフェースです。この中には、JITコンパイラーが、メタデータ トークンをルックアップしたり、型シグネチャーを調べて回ったり、フィールドやvtableのオフセットを計算したり、メソッド エントリーポイントを探索したり、文字列リテラルを構築したり、といった作業を行うための、数多くのメソッドが定義されています。このインターフェースの大部分は [src/inc/corinfo.h](https://github.com/dotnet/coreclr/blob/master/src/inc/corinfo.h)で定義されている `ICorJitDynamicInfo`から継承されています。実装は [src/vm/jitinterface.cpp](https://github.com/dotnet/coreclr/blob/master/src/vm/jitinterface.cpp)で定義（原文ママ）されています。
 
-# Internal Representation (IR)
+# 内部表現 (IR)
 
-## Overview of the IR
+## IRの概要
 
-The RyuJIT IR can be described at a high level as follows:
+RyuJIT IRの大まかな内容は次のように説明できます:
 
-* The Compiler object is the primary data structure of the JIT. Each method is represented as a doubly-linked list of `BasicBlock` objects. The Compiler object points to the head of this list with the `fgFirstBB` link, as well as having additional pointers to the end of the list, and other distinguished locations.
-  * `ICorJitCompiler::CompileMethod()` is invoked for each method, and creates a new Compiler object.  Thus, the JIT need not worry about thread synchronization while accessing Compiler state. The EE has the necessary synchronization to ensure there is a single JIT’d copy of a method when two or more threads try to trigger JIT compilation of the same method.
-* `BasicBlock` nodes contain a list of doubly-linked statements with no internal control flow (there is an exception for the case of the qmark/colon operator)
-  * The `BasicBlock` also contains the dataflow information, when available.
-* `GenTree` nodes represent the operations and statement of the method being compiled.
-  * It includes the type of the node, as well as value number, assertions, and register assignments when available.
-* `LclVarDsc` represents a local variable, argument or JIT-created temp. It has a `gtLclNum` which is the identifier usually associated with the variable in the JIT and its dumps. The `LclVarDsc` contains the type, use count, weighted use count, frame or register assignment etc. These are often referred to simply as “lclVars”. They can be tracked (`lvTracked`), in which case they participate in dataflow analysis, and have a different index (`lvVarIndex`) to allow for the use of dense bit vectors.
+* Compilerオブジェクトが、このJITの主なデータ構造となります。各メソッドは `BasicBlock`オブジェクトの双方向リンクリストとして表されます。Compilerオブジェクトは、 `fgFirstBB`リンクで、このリストの先頭を指し示し、このリストの終端へのポインターと、もうその他の位置情報も保持します。
+  * `ICorJitCompiler::CompileMethod()` は、各メソッドについて呼び出されて、新しいCompilerオブジェクトを生成します。従って、このJITはCompilerの内部状態にアクセスしている間、スレッド動機について心配する必要がありません。EEには、同一のメソッドについて複数のスレッドがJITコンパイルを行おうとした場合に、JITされたメソッドのコピーがただひとつだけとなることを保証するために必要な同期処理が、備わっています。
+* `BasicBlock` ノード群には、内部の制御フローをもたないステートメントの双方向リンクリストが含まれます。（?:演算子の場合を除く）
+  * The `BasicBlock` には、もし存在する場合にはデータフロー情報も含まれます。
+* `GenTree` ノード群は、コンパイルされているメソッドの命令とステートメントを表します。
+  * ここには、ノードの種類が、値の数値、アサーション、情報がある場合はレジスターへの代入情報、これらとともに含まれています。
+* `LclVarDsc` は、ローカル変数、引数、あるいはJITが生成した一時変数を表します。この中には、通常JITの中にある変数およびそのダンプ情報と関連付けられる識別子となる `gtLclNum` があります。この `LclVarDsc` には、型、使用回数、重み付けされた使用回数、フレーム、レジスターへの代入などが含まれています。これらはしばしば単に "lclVars" として言及されます。これらは追跡が可能で (`lvTracked`)、その場合これらはデータフロー解析の対象となります。また、別のインデックス (`lvVarIndex`) によって、効率の良いビットベクターを使用しています。
 
 ![RyuJIT IR Overview](../images/ryujit-ir-overview.png)
 
-The IR has two modes:
+このIRには2つのモードがあります:
 
-* In tree-order mode, non-statement nodes (often described as expression nodes, though they are not always strictly expressions) are linked only via parent-child links (unidirectional). That is, the consuming node has pointers to the nodes that produce its input operands.
-* In linear-order mode, non-statement nodes have both parent-child links as well as execution order links (`gtPrev` and `gtNext`).
-  * In the interest of maintaining functionality that depends upon the validity of the tree ordering, the linear mode of the `GenTree` IR has an unusual constraint that the execution order must represent a valid traversal of the parent-child links.
+* ツリー順序モードでは、非ステートメント ノード（よく式ノードと記述しますが、厳密には式に限られません）は親から子へのリンク（一方向）によってのみリンクされます。すなわち、消費する側のノードが、その入力オペランドを生成するノードへのポインターをもちます。
+* 線形オーダー モードでは、非ステートメント ノードは親から子へのリンクとその逆の両方を有しています ( `gtPrev` と `gtNext`)。
+  * ツリー順序の有効性に依存する機能をきちんと維持するために、 `GenTree` IRの線形モードには、実行順序は有効な親から子へのリンクの順番でなければならない、という特別な制約があります。
 
-A separate representation, `insGroup` and `instrDesc`, is used during the actual instruction encoding.
+別の表現として、 `insGroup` と `instrDesc` が、実際の命令エンコーディングに使用されます。
 
 ### Statement Order
 
