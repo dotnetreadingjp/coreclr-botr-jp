@@ -22,3 +22,4 @@
 - Profiling [原文](https://github.com/dotnet/coreclr/blob/master/Documentation/botr/profiling.md) [日本語訳](botr/profiling.md)
 - Implementing Profilability [原文](https://github.com/dotnet/coreclr/blob/master/Documentation/botr/profilability.md) [日本語訳](botr/profilability.md)
 - What Every Dev needs to Know About Exceptions in the Runtime [原文](https://github.com/dotnet/coreclr/blob/master/Documentation/botr/exceptions.md) [日本語訳](botr/exceptions.md)
+- ReadyToRun Overview [原文](https://github.com/dotnet/coreclr/blob/master/Documentation/botr/readytorun-overview.md) [日本語訳](botr/readytorun-overview.md)
