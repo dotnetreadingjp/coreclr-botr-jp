@@ -1,7 +1,7 @@
 ﻿ガベージコレクションの設計
 =========================
 
-(これは https://github.com/dotnet/coreclr/blob/master/Documentation/botr/garbage-collection.mdの日本語訳です。対象rev.は 8d3936b ）
+(これは https://github.com/dotnet/coreclr/blob/master/Documentation/botr/garbage-collection.md の日本語訳です。対象rev.は 8d3936b ）
 
 著者: Maoni Stephens ([@maoni0](https://github.com/maoni0)) - 2015
 
