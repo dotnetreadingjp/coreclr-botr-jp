@@ -1,5 +1,4 @@
-﻿Virtual Stub Dispatch
-仮想スタブディスパッチ
+﻿仮想スタブディスパッチ
 =====================
 
 (これはhttps://github.com/dotnet/coreclr/blob/master/Documentation/botr/virtual-stub-dispatch.mdの日本語訳です。対象rev.は 8d3936b ）
@@ -131,7 +130,6 @@ _スロット_ と言う用語は、常に従来のvtableのレイアウトに�
 
 インターフェイスディスパッチはスタブを通じて呼び出します。これらのスタブはすべて必要に応じて生成され、すべてがトークンとオブジェクトを実装に一致させるという最終目標を持っており、呼び出しを実装に転送します。
 
-There are currently three types of stubs. The below diagram shows the general control flow between these stubs, and will be explained below.
 現在、スタブは3種類あります。以下の図は、図の後で説明する、これらのスタブ間の一般的な制御フローを示しています。
 
 ![Figure 2](https://github.com/dotnet/coreclr/blob/master/Documentation/images/virtualstubdispatch-fig2.png)
