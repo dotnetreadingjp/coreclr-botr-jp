@@ -21,5 +21,5 @@
 - Data Access Component (DAC) Notes [原文](https://github.com/dotnet/coreclr/blob/master/Documentation/botr/dac-notes.md) <del>[日本語訳](botr/dac-notes.md)</del>
 - Profiling [原文](https://github.com/dotnet/coreclr/blob/master/Documentation/botr/profiling.md) <del>[日本語訳](botr/profiling.md)</del>
 - Implementing Profilability [原文](https://github.com/dotnet/coreclr/blob/master/Documentation/botr/profilability.md) <del>[日本語訳](botr/profilability.md)</del>
-- What Every Dev needs to Know About Exceptions in the Runtime [原文](https://github.com/dotnet/coreclr/blob/master/Documentation/botr/exceptions.md) <del>[日本語訳](botr/exceptions.md)</del>
+- ランタイムの例外について全開発者が知るべきこと [原文](https://github.com/dotnet/coreclr/blob/master/Documentation/botr/exceptions.md) [日本語訳](botr/exceptions.md)
 - ネイティブコード付きのマネージド実行可能ファイル [原文](https://github.com/dotnet/coreclr/blob/master/Documentation/botr/readytorun-overview.md) [日本語訳](botr/readytorun-overview.md)
