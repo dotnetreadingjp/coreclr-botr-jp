@@ -1,6 +1,6 @@
 ランタイムの例外について全開発者が知るべきこと
 ============================================================
-(これは https://github.com/dotnet/coreclr/blob/master/Documentation/botr/exceptions.mdの日本語訳です。対象rev.は 8d3936b)
+(これは https://github.com/dotnet/coreclr/blob/master/Documentation/botr/exceptions.md の日本語訳です。対象rev.は 8d3936b)
 
 Date: 2005
 
