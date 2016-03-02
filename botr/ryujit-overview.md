@@ -48,32 +48,34 @@ RyuJIT IRの大まかな内容は次のように説明できます:
 
 別の表現として、 `insGroup` と `instrDesc` が、実際の命令エンコーディングに使用されます。
 
-### Statement Order
+### ステートメントの順序
 
-During the “front end” of the JIT compiler (prior to Rationalization), the execution order of the `GenTree` nodes on a statement is fully described by the “tree” order – that is, the links from the top node of a statement (the `gtStmtExpr`) to its children. The order is determined by a depth-first, left-to-right traversal of the tree, with the exception of nodes marked `GTF_REVERSE_OPS` on binary nodes, whose second operand is traversed before its first.
+JITコンパイラの「フロントエンド」の間（合理化 - Rationalization - の前）は、ステートメント上の`GenTree` ノードの実行順は「ツリー」順、すなわち、あるステートメントの最上位ノードから子孫へのリンク（`gtStmtExpr`）で、全て記述されます。
+この順序は、ツリーの深さ優先探索によって決定されます。ただし、二分木ノードにおいて `GTF_REVERSE_OPS`とマークされたノードは、例外的に、第二オペランドが第一オペランドより先に探索されます。
 
-After rationalization, the execution order can no longer be deduced from the tree order alone. At this point, the dominant ordering becomes “linear order”. This is because at this point any `GT_COMMA` nodes have been replaced by embedded statements, whose position in the execution order can only be determined by the `gtNext` and `gtPrev` links on the tree nodes.
+合理化の後は、実行順序はツリー順のみから演繹的に判断することはできません。この時点では、支配的な順序付けは「線形順序」となります。
+それは、この時点では、どんな`GT_COMMA`ノードも埋め込み式に置き換えられており、それらの実行順における位置は、それらのノードの`gtNext`や`gtPrev`のリンクによってのみ判断できるためです。
 
-This modality is captured in the `fgOrder` flag on the Compiler object – it is either `FGOrderTree` or `FGOrderLinear`.
+このモード情報は、Compilerオブジェクトの`fgOrder`フラグによって取得でき、その値は`FGOrderTree`か`FGOrderLinear`となります。
 
-## GenTree Nodes
+## GenTree ノード
 
-Each operation is represented as a GenTree node, with an opcode (GT_xxx), zero or more child `GenTree` nodes, and additional fields as needed to represent the semantics of that node.
+それぞれの命令はGenTreeノードとして、1つのオペコード (GT_xxx)と、任意の数の子`GenTree`ノードと、その他そのノードのセマンティクスのために必要なフィールド、によって表されます。
 
-The `GenTree` nodes are doubly-linked in execution order, but the links are not necessarily valid during all phases of the JIT.
+この`GenTree`ノードは、実行順で並べられた双方向リンクですが、これらのリンクは必ずしもJITの全フェーズにおいて有効であるわけではありません。
 
-The statement nodes utilize the same `GenTree` base type as the operation nodes, though they are not truly related.
+ステートメント ノードは、命令ノードと同じく、`GenTree`ベース型を利用していますが、これらは関連性があるというわけではありません。
 
-* The statement nodes are doubly-linked. The first statement node in a block points to the last node in the block via its `gtPrev` link. Note that the last statement node does *not* point to the first; that is, the list is not fully circular.
-* Each statement node contains two `GenTree` links – `gtStmtExpr` points to the top-level node in the statement (i.e. the root of the tree that represents the statement), while `gtStmtList` points to the first node in execution order (again, this link is not always valid).
+* ステートメント ノードは双方向リンクです。ブロックにおける最初のステートメントノードは、そのブロックの最後のノードを`gtPrev`リンクで指します。注意事項ですが、最後のステートメントノードは最初のノードを*指しません*。つまり、このリストは完全な円環ではありません。
+* 各ステートメント ノードには、2つの`GenTree`へのリンクがあります。`gtStmtExpr`は、そのステートメントにおける最上位ノード（すなわちそのステートメントを表すツリーのルート）を指し、`gtStmtList`は実行順における最初のノードを指します（重ねて書きますが、このリンクが常に有効とは限りません）。
 
-### Example of Post-Import IR
+### インポート後のIRの例
 
-For this snippet of code (extracted from [tests/src/JIT/CodeGenBringUpTests/DblRoots.cs](https://github.com/dotnet/coreclr/blob/master/tests/src/JIT/CodeGenBringUpTests/DblRoots.cs)):
+以下のコードスニペットについて( [tests/src/JIT/CodeGenBringUpTests/DblRoots.cs](https://github.com/dotnet/coreclr/blob/master/tests/src/JIT/CodeGenBringUpTests/DblRoots.cs)から抜粋):
 
        r1 = (-b + Math.Sqrt(b*b - 4*a*c))/(2*a);
 
-A stripped-down dump of the `GenTree` nodes just after they are imported looks like this:
+インポート直後のこの`GenTree`ノードのダンプをストリップした状態は、次のようになります:
 
     ▌ stmtExpr  void  (top level) (IL 0x000...0x026)
     │        ┌──▌ lclVar    double V00 arg0
@@ -97,28 +99,38 @@ A stripped-down dump of the `GenTree` nodes just after they are imported looks l
        └──▌ indir     double
           └──▌ lclVar    byref  V03 arg3
 
-## Types
+## 型
 
-The JIT is primarily concerned with “primitive” types, i.e. integers, reference types, pointers, and floating point types.  It must also be concerned with the format of user-defined value types (i.e. struct types derived from `System.ValueType`) – specifically, their size and the offset of any GC references they contain, so that they can be correctly initialized and copied.  The primitive types are represented in the JIT by the `var_types` enum, and any additional information required for struct types is obtained from the JIT/EE interface by the use of an opaque `CORINFO_CLASS_HANDLE`.
+このJITは主に「プリミティブな」型、つまり整数、参照型、ポインタ、浮動小数点型、を考慮して設計されています。
+ユーザー定義の値型（つまり`System.ValueType`から派生する構造体型）のフォーマット -  特に、それらが適切に初期化されコピーされるために必要となる、そのサイズと、それらが含むGC参照のオフセット - についても考慮しなければなりません。
+プリミティブ型は、このJITでは`var_types`列挙型として表され、構造体型に必要となる追加情報は、JIT/EEインターフェースから透過的な`CORINFO_CLASS_HANDLE`を使用して取得できます。
 
-## Dataflow Information
+## データフローの情報
 
-In order to limit throughput impact, the JIT limits the number of lvlVars for which liveness information is computed. These are the tracked lvlVars (`lvTracked` is true), and they are the only candidates for register allocation.
+スループットへの影響を抑えるために、このJITでは、生存情報が計算されるlvlVarsの数を抑えています。
+それらは、追跡されているlvlVars（`lvTracked`がtrue）となり、それらのみがレジスター確保の対象候補となります。
 
-The liveness analysis determines the set of defs, as well as the uses that are upward exposed, for each block. It then propagates the liveness information. The result of the analysis is captured in the following:
+生存情報分析では、各ブロックにおいて、defのうち、以降も利用されているものを、集合として、決定します。
+そして、その生存情報を伝播します。この分析の結果は、以下のように取得されます:
 
-* The live-in and live-out sets are captured in the `bbLiveIn` and `bbLiveOut` fields of the `BasicBlock`.
-* The `GTF_VAR_DEF` flag is set on a lvlVar `GenTree` node that is a definition.
-* The `GTF_VAR_USEASG` flag is set (in addition to the `GTF_VAR_DEF` flag) for the target of an update (e.g. +=).
-* The `GTF_VAR_USEDEF` is set on the target of an assignment of a binary operator with the same lvlVar as an operand.
+* live-inとlive-outの集合は、`BasicBlock`中の`bbLiveIn`と`bbLiveOut`フィールドとして取得されます。
+* `GTF_VAR_DEF`フラグが、lvlVarである`GenTree`（定義）ノード上に設定されます。
+* `GTF_VAR_USEASG`フラグが、（`GTF_VAR_DEF`フラグに加えて）更新（例: +=）の対象上に設定されます。
+* `GTF_VAR_USEDEF`が、バイナリ オペレーターの、オペランドと同一のlvlVarを代入される対象の上に、設定されます。
+
+（TODO: この辺りは原文の解釈が困難なのでコードと照らし合わせるべき…）
 
 ## SSA
 
-Static single assignment (SSA) form is constructed in a traditional manner [[1]](#[1]). The SSA names are recorded on the lvlVar references. While SSA form usually retains a pointer or link to the defining reference, RyuJIT currently retains only the `BasicBlock` in which the definition of each SSA name resides.
+静的単一代入（SSA）形式は、伝統的なやり方で構築されます[[1]](#[1]).
+SSA名はlvlVar参照の上に記録されます。
+SSA形式では、通常は定義する側の参照へのポインタあるいはリンクを保持しますが、RyuJITでは現在のところ、各SSA名の定義が存在している`BasicBlock`のみを保持します。
 
-## Value Numbering
+## 値のナンバリング
 
-Value numbering utilizes SSA for lvlVar values, but also performs value numbering of expression trees. It takes advantage of type safety by not invalidating the value number for field references with a heap write, unless the write is to the same field. The IR nodes are annotated with the value numbers, which are indexes into a type-specific value number store. Value numbering traverses the trees, performing symbolic evaluation of many operations.
+値のナンバリングでは、lvlVarの値においてSSAを活用しますが、式ツリーの値のナンバリングも行います。ここでは、ヒープ書き込みにおいて、同一のフィールドに対する書き込み以外では、フィールド参照における値となる数値を無効化しない、という点で、型安全のアドバンテージを活用しています（訳注: SSAでは、いったん代入された変数の値が変わらず、変数の値が変わる時は、同じ変数名ラベルが付けられた変数であっても、新たに変数を定義し、以降は同変数への参照は新しい方の値に解決する、ということが行われるため、このような「活用」が可能となる）。
+IRノードでは、型別に存在する値の数値の格納庫におけるインデックスとなる数値によって、値が記述されます。
+値のナンバリングでは、ツリーを探索して、多くの命令について、シンボル評価を行います。
 
 # Phases of RyuJIT
 
