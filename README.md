@@ -18,7 +18,7 @@
 - 仮想スタブディスパッチ [原文](https://github.com/dotnet/coreclr/blob/master/Documentation/botr/virtual-stub-dispatch.md) [日本語訳](botr/virtual-stub-dispatch.md)
 - CLRのスタックウォーキング [原文](https://github.com/dotnet/coreclr/blob/master/Documentation/botr/stackwalking.md) [日本語訳](botr/stackwalking.md)
 - Mscorlibおよびランタイム呼び出し [原文](https://github.com/dotnet/coreclr/blob/master/Documentation/botr/mscorlib.md) [日本語訳](botr/mscorlib.md)
-- Data Access Component (DAC) Notes [原文](https://github.com/dotnet/coreclr/blob/master/Documentation/botr/dac-notes.md) <del>[日本語訳](botr/dac-notes.md)</del>
+- Data Access Component (DAC) Notes [原文](https://github.com/dotnet/coreclr/blob/master/Documentation/botr/dac-notes.md) [日本語訳](botr/dac-notes.md)
 - Profiling [原文](https://github.com/dotnet/coreclr/blob/master/Documentation/botr/profiling.md) <del>[日本語訳](botr/profiling.md)</del>
 - Implementing Profilability [原文](https://github.com/dotnet/coreclr/blob/master/Documentation/botr/profilability.md) <del>[日本語訳](botr/profilability.md)</del>
 - ランタイムの例外について全開発者が知るべきこと [原文](https://github.com/dotnet/coreclr/blob/master/Documentation/botr/exceptions.md) [日本語訳](botr/exceptions.md)
