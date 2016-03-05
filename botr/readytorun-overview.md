@@ -9,14 +9,14 @@ Managed Executables with Native Code
 <!--
 Since shipping the .NET Runtime over 10 years ago, there has only been one file format which can be used to distribute and deploy managed code components: the CLI file format. This format expresses all execution as machine independent intermediate language (IL) which must either be interpreted or compiled to native code sometime before the code is run. This lack of an efficient, directly executable file format is a very significant difference between unmanaged and managed code, and has become more and more problematic over time. Problems include:
 -->
-.NETランタイムは10年以上前に出たものなので、ファイルフォーマットとしては、配布・配置可能なマネージドコードのコンポーネントであるCLIファイルフォーマットしかありません。このフォーマットは全ての実行コードをマシンから独立した中間言語（IL：Intermediate Language）として表現し、このILコードを実行するには、インタープリターまたはコンパイラによってネイティブコードに変換されなければなりません。この、効率的で、直接実行可能なファイルフォーマットがないことが、アンマネージドコードとマネージドコードの非常に大きな違いとなっており、次第により大きな問題になってきました。その問題とは次のようなものです：
+.NETランタイムが出て10年以上経ちましたが、ファイルフォーマットとしては、配布・配置可能なマネージドコードのコンポーネントであるCLIファイルフォーマットしかありません。このフォーマットは全ての実行コードをマシンから独立した中間言語（IL：Intermediate Language）として表現し、このILコードを実行するには、インタープリターまたはコンパイラによってネイティブコードに変換されなければなりません。この、効率的で、直接実行可能なファイルフォーマットがないことが、アンマネージドコードとマネージドコードの非常に大きな違いとなっており、次第により大きな問題になってきました。その問題とは次のようなものです：
 
 <!--
 - Native code generation takes a relatively long time and consumes power.
 - For security / tamper-resistance, there is a very strong desire to validate any native code that gets run (e.g. code is signed).
 - Existing native codegen strategies produce brittle code such that when the runtime or low level framework is updated, all native code is invalidated, which forces the need for recompilation of all that code.
 -->
-- ネイティブコード生成には、比較的時間と電力がかかる。
+- ネイティブコード生成には、比較的時間とCPUパワーがかかる。
 - セキュリティ上の理由や改ざん耐性のために、実行されるネイティブコードがすべて検証されていること（たとえば、コードが署名されているなど）が強く望まれている。
 - 既存のネイティブコード生成戦略が生成するコードは脆いところがあり、ランタイムや低レベルのフレームワークを更新すると、全てのネイティブコードが無効になり、ネイティブコード全体の再コンパイルが必要とされる。
 
@@ -47,7 +47,7 @@ In this proposal we attack this discrepancy between managed and unmanaged code h
 <!--
 The .NET Runtime has had a native code story (NGEN) for a long time. However what is being proposed here is architecturally different than NGEN. NGEN is fundamentally a cache (it is optional and only affects the performance of the app) and thus the fragility of the images was simply not a concern. If anything changes, the NGEN image is discarded and regenerated. On the other hand:
 -->
-.NETランタイムには、ずっと前からネイティブコード用の戦略（NGEN）がありました。ただし、ここで提案するものはNGENとはアーキテクチャ的に異なるものです。NGENは基本的にキャッシュであり（オプションであり、アプリケーションのパフォーマンスにのみ影響します）、そのため、イメージの脆さについては単に関わりを持っていません。何らかの変更があると、NGENイメージは破棄、再生成されます。その一方で、
+.NETランタイムには、ずっと前からネイティブコード用の戦略（NGEN）がありました。ただし、ここで提案するものはNGENとはアーキテクチャ的に異なるものです。NGENは基本的にキャッシュであり（使用しないこともでき、アプリケーションのパフォーマンスにのみ影響します）、そのため、イメージの脆さについては単に関わりを持っていません。何らかの変更があると、NGENイメージは破棄、再生成されます。その一方で、
 <!--
 **A native file format carries a strong guarantee that the file will continue to run despite updates and improvements to the runtime or framework.**
 -->
@@ -83,12 +83,12 @@ Each feature of the file format needs to have an answer to the question of how i
 <!--
 As mentioned, while NGEN is a native file format, it is not an appropriate starting point for this proposal because it is too fragile. 
 -->
-前述のように、NGENはネイティブファイルフォーマットですが、あまり脆いために、この提案のスタート地点として適切ではありません。
+前述のように、NGENはネイティブファイルフォーマットですが、あまりにも脆いために、この提案のスタート地点として適切ではありません。
 
 <!--
 Looking carefully at the CLI file format shows that it is really 'not that bad' as a starting point. At its heart CLI is a set of database-like tables (one for types, methods, fields, etc.), which have entries that point at variable-length things (e.g. method names, signatures, method bodies). Thus CLI is 'pay for play' and since it is already public and version resilient, there is very little downside to including it in the format. By including it we also get the following useful properties:
 -->
-CLIファイルフォーマットを注意深く見てみると、スタート地点として「それほど悪くない」ことがわかります。本来、CLIは、（型、メソッド、フィールド等に対して1つずつの）データベースのような表のセットであり、それぞれのエントリが可変長のデータ（メソッド名、シグネチャ、メソッド本体など）を指し示すものです。したがって、CLIは「賭ける価値がある」もので、さらに既に公開済みでバージョン耐性を持つので、新しいファイルフォーマットに含めることによる欠点はごくわずかです。含めることによって、次のような有効な特性も得られます：
+CLIファイルフォーマットを注意深く見てみると、スタート地点として「それほど悪くない」ことがわかります。本来、CLIは、データベースのような（型、メソッド、フィールド等それぞれに対しての）表のセットであり、それぞれのエントリが可変長のデータ（メソッド名、シグネチャ、メソッド本体など）を指し示すものです。したがって、CLIは「賭ける価値がある」もので、さらに既に公開済みでバージョン耐性を持つので、新しいファイルフォーマットに含めることによる欠点はごくわずかです。含めることによって、次のような有効な特性も得られます：
 
 <!--
 - Immediate support for _all_ features of the runtime (at least for files that include complete CLI within them)
@@ -192,7 +192,7 @@ Thus this proposal does _not_ suggest that we try to solve the problem of having
 <!--
 **It is a breaking change to change the number or type of any (including private) fields of a public value type (struct). However if the struct is non-public (that is internal) then the restriction does not apply.**
 -->
-**publicな値型（構造体）の任意のフィールド（publicでないものを含む）の数または型の変更は互換性のない変更である。ただし、その構造体が非public（つまりinternal）である場合、この制約は適用されない。**
+**publicな値型（構造体）のフィールド（publicでないものを含む）の数または型の変更は、すべて互換性のない変更である。ただし、その構造体が非public（つまりinternal）である場合、この制約は適用されない。**
  
 <!--
 This is a compatibility that is not present for CIL. All other changes allowed by CIL can be allowed by native code without prohibitive penalty. In particular the following changes are allowed:
@@ -234,7 +234,7 @@ Thus in general the performance impact of versioning decreases as module size in
 <!--
 It is worth reiterating the general principle covered in this section
 -->
-このセクションで触れる一般的な原則を繰り返し言うとよいでしょう。
+このセクションで触れる一般的な原則を振り返ります。
 
 <!--
 **Code of methods and types that do NOT span version bubbles does NOT pay a performance penalty.**
@@ -549,7 +549,7 @@ These conventions would be codified as well.
 <!--
 Because it was already the case that methods outside the current module had to use an indirect call, versionability does not introduce more overhead for non-virtual method calls if inlining was not done. Thus the main cost of  making the native code version resilient is the requirement that no cross version bubble inlining can happen.
 -->
-現在のモジュールの外にあるメソッドのケースでは既に間接呼び出しを行わなければならなかったので、バージョン管理を可能とすることで、インライン化が行われない場合の非仮想メソッド呼び出しについて、追加のオーバーヘッドはありません。そのため、ネイティブコードのバージョン耐性のための主要なコストは、バージョンバブル越えインライン化が起こらないという要件です。
+現在のモジュールの外にあるメソッドのケースでは既に間接呼び出しを行わなければならなかったので、バージョン管理を可能とすることで、インライン化が行われない場合の非仮想メソッド呼び出しについて、追加のオーバーヘッドはありません。そのため、ネイティブコードのバージョン耐性のための主要なコストは、バージョンバブルを越えたインライン化が起こらないという要件です。
  
 <!--
 The best solution to this problem is to avoid 'chatty' library designs (Unfortunately, `IEnumerable`, is such a chatty design, where each iteration does a `MoveNext` and `Current` property fetch). Another mitigation is the one mentioned previously: to allow clients of the library to selectively JIT compile some methods that make these chatty calls. Finally you can also use new custom `NonVersionableAttribute` attribute, which effectively changes the versioning contract to indicate that the library supplier has given up his right to change that method's body and thus it would be legal to inline.
@@ -559,7 +559,7 @@ The best solution to this problem is to avoid 'chatty' library designs (Unfortun
 <!--
 The proposal is to disallow cross-version bubble inlining by default, and selectively allow inlining for critical methods (by giving up the right to change the method).
 -->
-提案は、既定ではバージョンバブル越えインライン化を許可せず、重要なメソッドについて（メソッドの変更権をあきらめることで）インライン化を選択的に許可するというものです。
+提案は、既定ではバージョンバブルを越えたインライン化を許可せず、重要なメソッドについて（メソッドの変更権をあきらめることで）インライン化を選択的に許可するというものです。
 
 <!--
 Experiments with disabled cross-module inlining with the selectively enabled inlining of critical methods showed no visible regression in ASP.NET throughput.
@@ -697,7 +697,7 @@ The proposal is to use the same technique as for object creation. Note that type
 To do its job the garbage collector must be able to take an arbitrary object in the GC heap and find all the GC references in that object. It is also necessary for the GC to 'scan' the GC from start to end, which means it needs to know the size of every object. Fast access to two pieces of information is what is needed. 
 From a versioning perspective, the fundamental problem with GC information is that (like field offsets) it incorporates information from the entire inheritance hierarchy in general case. This means that the information is not version resilient.
 -->
-仕事をするために、ガベージコレクターはGCヒープ内の任意のオブジェクトに対処可能でなければならず、かつそのオブジェクトに対する全てのGC参照を発見できなければなりません。GCが初めから終わりまで「スキャン」できる必要もあります。つまり、全てのオブジェクトのサイズを知る必要があります。必要なものは、2つの情報ピースへの高速なアクセスです。バージョン管理の観点からは、GC情報における基本的な問題は、（フィールドオフセットと同様に）、一般的なケースにおいて、継承階層全体からの情報を合わせたものであることです。つまり、この情報にはバージョン耐性がありません。
+ガベージコレクターが動作するには、GCヒープ内の任意のオブジェクトを処理可能でなければならず、かつそのオブジェクトに対する全てのGC参照を発見できなければなりません。GCが初めから終わりまで「スキャン」できる必要もあります。つまり、全てのオブジェクトのサイズを知る必要があります。必要なものは、2つの情報ピースへの高速なアクセスです。バージョン管理の観点からは、GC情報における基本的な問題は、（フィールドオフセットと同様に）、一般的なケースにおいて、継承階層全体からの情報を合わせたものであることです。つまり、この情報にはバージョン耐性がありません。
 
 <!--
 While it is possible to make the GC information resilient and have the GC use this resilient data, GC happens frequently and type loading happens infrequently, so arguably you should trade type loading speed for GC speed if given the choice. Moreover the size of the GC information is typically quite small (e.g. 12-32 bytes) and will only occur for those types that cross version bubbles. Thus forming the GC information on the fly (from a version resilient form) is a reasonable starting point. 
