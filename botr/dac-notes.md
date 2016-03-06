@@ -217,48 +217,84 @@ Finally, to get the code address, the DAC/DBI interface function will call Metho
 -->
 ### PTR型
 
+<!--
 Because the DAC marshals values from the target address space to the host address space, understanding how the DAC handles target pointers is fundamental. We collectively refer to the fundamental types used for marshaling these as "PTR types." You will see that [daccess.h][daccess.h] defines two classes: \_\_TPtrBase, which has several derived types, and \_\_GlobalPtr. We don't use these types directly; we use them only indirectly through a number of macros. Each of these contains a single data member to give us the target address of the value. For \_\_TPtrBase, this is a full address. For \_\_GlobalPtr, it is a relative address, referenced from a DAC global base location. The "T" in \_\_TPtrBase stands for "target". As you can guess, we use types derived from \_\_TPtrBase for pointers that are data members or locals and we use \_\_GlobalPtr for globals and statics.
+-->
+DACはターゲットアドレス空間からホストアドレス空間に値をマーシャリングするので、DACがターゲットのポインターをどのように処理するのかの理解が基礎となります。これらポインターのマーシャリングに使用される基本的な型を総称して「PTR型」と言います。[daccess.h][daccess.h]には、\_\_TPtrBase（いくつかの派生型があります）と\_\_GlobalPtrという2つのクラスが定義されています。これらの型を直接使用することはなく、さまざまなマクロ経由で間接的にのみ使います。それぞれのPTR型は値のターゲットアドレスとなる単一のデータメンバーを保持しています。\_\_TPtrBaseの場合、完全なアドレスになります。\_\_GlobalPtrの場合、DACグローバルベース位置からの相対アドレスになります。\_\_TPtrBaseの「T」は「ターゲット（target）」の略です。想像できるかと思いますが、\_\_TPtrBaseから派生した型はデータメンバーまたはローカル変数のポインターに対して使い、\_\_GlobalPtrはグローバル変数または静的フィールドのポインターに対して使います。
 
+<!--
 In practice, we use these types only through macros. The introductory comment in [daccess.h][daccess.h] has examples of the use of all of these. What is interesting about these macros is that they will expand to declare instantiated types from these marshaling templates in DAC builds, but are no-ops in non-DAC builds. For example, the following definition declares PTR\_MethodTable as a type to represent method table pointers (note that the convention is to name these types with a prefix of PTR\_):
+-->
+実際、これらの型はマクロ経由でのみ使います。[daccess.h][daccess.h]冒頭のコメントには、これら全てのPTR型の使用例があります。これらのマクロで興味深い点は、DACビルドではこれらのマーシャリングテンプレートからインスタンス化される型の宣言に展開されるの対し、非DACビルドでは何もしないことです。たとえば、以下の宣言は、メソッドテーブルポインターを表す型として、PTR\_MethodTableを宣言しています（型の名前にPTR\_プレフィックスを付けるという規約になっていることに留意してください）。
 
 	typedef DPTR(class MethodTable) PTR\_MethodTable;
 
+<!--
 In a DAC build, the DPTR macro will expand to declare a \_\_DPtr<MethodTable> type named PTR\_MethodTable. In a non-DAC build, the macro simply declares PTR\_MethodTable to be MethodTable \*. This implies that the DAC functionality does not result in any behavior change or performance degradation in non-DAC builds.
+-->
+DACビルドでは、DPTRマクロはPTR\_MethodTableという名前の\_\_DPtr<MethodTable>型に展開されます。非DACビルドでは、マクロは単純にPTR\_MethodTableをMethodTable \*になるように宣言します。このことは、非DACビルドにおいて、DACの機能が何らかの動作の変更やパフォーマンスの劣化をもたらすことがないことを暗黙的に意味します。
 
+<!--
 Even better, in a DAC build, the DAC will automatically marshal variables, data members, or return values declared to be of type PTR\_MethodTable, as we saw in the example in the last section. The marshaling is completely transparent. The \_\_DPtr type has overloaded operator functions to redefine pointer dereferencing and array indexing, and a conversion operator to cast to the host pointer type. These operations determine whether the requested value is already in the cache, from whence the operators will return them immediately, or whether it is necessary to read from the target and load the value into the cache before returning it. If you are interested in understanding the details, the function responsible for these cache operations is DacInstantiateTypeByAddressHelper.
+-->
+さらに良いことに、直前のセクションの例で見たように、DACビルドにおいて、DACは、PTR\_MethodTable型として宣言された変数、データメンバー、戻り値を自動的にマーシャリングします。マーシャリングは完全に透過的です。\_\_DPtr型は、ポインターの逆参照と配列インデックスアクセス用の演算子オーバーロード関数と、ホストポインター型へのキャスト用の変換演算子を定義しています。これらの演算子は、要求された値が既にキャッシュにあるかどうかを判定し、あればそこからすぐに値を返し、ターゲットから読み取る必要があればキャッシュに値を読み込んでから返します。動作の詳細を理解したい場合のために言うと、これらのキャッシュ操作の役割を持つ関数はDacInstantiateTypeByAddressHelperです。
 
+<!--
 PTR types defined with DPTR are the most common in the runtime, but we also have PTR types for global and static pointers, restricted-use arrays, pointers to variable-sized objects, and pointers to classes with virtual functions that we may need to call from mscordacwks.dll (msdaccore.dll). Most of these are rare and you can refer to [daccess.h][daccess.h] to learn more about them if you need them.
+-->
+ランタイムにおいてDPTRと一緒に定義されたPTR型が最も一般的ですが、グローバルポインターや静的ポインター、restrict付きで使用される配列<!--要確認：restricted-use arraysはこれでOK？-->、可変長オブジェクトへのポインター、mscordacwks.dll（msdaccore.dll）からの呼び出しが必要になるであろう仮想関数を持つクラスへのポインター用のPTR型もあります。これらのほとんどはめったに使用されないので、必要に応じて[daccess.h][daccess.h]を参照して調べてください。
 
+<!--
 The GPTR and VPTR macros are common enough to warrant special mention here. Both the way we use these and their external behavior is quite similar to DPTRs. Again, marshaling is automatic and transparent. The VPTR macro declares a marshaled pointer type for a class with virtual functions. This special macro is necessary because the virtual function table is essentially an implicit extra field. The DAC has to marshal this separately, since the function addresses are all target addresses that the DAC must convert to host addresses. Treating these classes in this way means that the DAC automatically instantiates the correct implementation class, making casts between base and derived types unnecessary. When you declare a VPTR type, you must also list it in vptr\_list.h. \_\_GlobalPtr types provide base functionality to marshal both global variables and static data members through the GPTR, GVAL, SPTR and SVAL macros. The implementation of global variables is almost identical to that of static fields (both use the \_\_GlobalPtr class) and require the addition of an entry in [dacvars.h][dacvars.h]. The comments in daccess.h and dacvars.h provide more details about declaring these types.
+-->
+GPTRマクロとVPTRマクロはよく使われるので、ここで説明しておく必要があるでしょう。これらの使い方と外部から見たふるまいは、どちらもDPTRに非常によく似ています。ここでも、マーシャリングは自動的かつ透過的です。VPTRマクロは仮想関数を持つクラス用のマーシャリングされたポインター型を宣言するマクロです。仮想関数テーブルは本質的には暗黙的な追加フィールドであるため、この特別なマクロが必要となります。関数のアドレスはすべてホストアドレスに変換しなければならないターゲットアドレスであるため、DACは仮想関数テーブルを他のフィールドとは別にマーシャリングしなければなりません。この方法でクラスを扱うということは、DACが正しい実装クラスを自動的にインスタンス化し、基底型と派生型の間のキャストを不要にするということを意味します。VPTR型を宣言するときには、vptr\_list.hの一覧にその型を追加する必要もあります。\_\_GlobalPtr型は、グローバル変数と静的データメンバーの両方について、GPTR、GVAL、SPTR、SVALマクロ経由でマーシャリングする基本機能を提供します。グローバル変数の実装は、静的フィールドのものとほとんど同じ（どちらも\_\_GlobalPtrクラスを使います）で、[dacvars.h][dacvars.h]にエントリを追加する必要があります。daccess.hとdacvars.hのコメントに、これらの型の宣言についてのさらに詳しい説明が書いてあります。
 
 [dacvars.h]: https://github.com/dotnet/coreclr/blob/master/src/inc/dacvars.h
 
+<!--
 Global and static values and pointers are interesting because they form the entry points to the target address space (all other uses of the DAC require you to have a target address already). Many of the globals in the runtime are already DACized. It occasionally becomes necessary to make a previously unDACized (or a newly introduced) global available to the DAC. By using the appropriate macros and [dacvars.h][dacvars.h] entry, you enable a post-build step (DacTableGen.exe run by the build in ndp\clr\src\dacupdatedll) to save the address of the global (from clr.pdb) into a table that is embedded into mscordacwks.dll. The DAC uses this table at run-time to determine where to look in the target address space when the code accesses a global.
+-->
+グローバル変数と静的フィールドの値とポインターは、ターゲットアドレス空間へのエントリポイントとなるので特筆に値します（DACの他の使用法では、すべてターゲットアドレスを取得済みとなります）。ランタイムのグローバル変数の多くは既にDAC化（DACize）済みです。ときどき、DACが使用可能な、事前に逆DAC化された（または新しく導入された）グローバル変数にする必要が生じる場合があります。適切なマクロと[dacvars.h][dacvars.h]のエントリを使うと、ビルド後のステップ（ndp\clr\src\dacupdatedllでのビルドによるDacTableGen.exeの実行）によって、mscordacwks.dll内に埋め込まれるテーブルにグローバル変数のアドレスを（clr.pdbから）保存できます。実行時、コードがグローバル変数にアクセスしたときに、DACはこのテーブルを使用して、見るべきターゲットアドレス空間を判定します。
 
 <!--
 ### VAL Types
 -->
 ### VAL型
 
+<!--
 In addition to pointer types, the DAC must also marshal static and global values (as opposed to values referenced by static or global pointers). For this we have a collection of macros ?VAL\_\*. We use GVAL\_\* for global values, and SVAL\_\* for static values. The comment in the [daccess.h][daccess.h] file has a table showing how to use the various forms of these and includes instructions for declaring global and static values (and global and static pointers) that we will use in DACized code.
+-->
+ポインター型に加え、（静的フィールドまたはグローバル変数のポインターから参照される値とは対照的に）DACは静的フィールドとグローバル変数の値もマーシャリングしなければなりません。このために、一連の?VAL\_\*があります。グローバル変数の値にはGVAL\_\*マクロを、静的フィールドの値にはSVAL\_\*マクロを使います。[daccess.h][daccess.h]ファイルのコメントには、これらさまざまな形態のマクロの使用方法を示す表と、DAC化されたコードで使用するグローバル変数の値とフィールドの値を宣言する手順が書いてあります（それぞれのポインターについても書いてあります）。
 
 <!--
 ### Pure Addresses
 -->
 ### 純粋なアドレス
 
+<!--
 The TADDR and PCODE types we introduced in the example of DAC operation are pure target addresses. These are actually integer types, rather than pointers. This prevents code in the host from incorrectly dereferencing them. The DAC does not treat them as pointers either. Specifically, because we have no type or size information no dereferencing or marshalling can occur. We use these primarily in two situations: when we are treating a target address as pure data and when we need to do pointer arithmetic with target addresses (although we can also do pointer arithmetic with PTR types). Of course, because TADDRs have no type information for the target locations they specify, when we perform address arithmetic, we need to factor in the size explicitly.
+-->
+DAC操作の例に記述されているTADDR型とPCODE型は、純粋なターゲットアドレスです。これらは実際のところポインター型ではなく整数型です。これらはホスト内のコードにおける不正な逆参照を防ぎます。DACはこれらをいずれもポインターとして扱いません。具体的に言うと、型の情報もサイズの情報もないので、逆参照もマーシャリングも起こり得ないのです。これらの型は、主に2つの状況で使います。すなわち、純粋なデータとしてターゲットアドレスを取り扱う場合と、（PTR型を使ったポインター演算を実行可能であるにもかかわらず）ターゲットアドレスを使ったポインター演算をする必要がある場合です。言うまでもありませんが、TADDRにはそれが指し示すターゲット位置についての型情報がないので、アドレス演算を実行するときには、明示的なサイズ係数が必要になります。
 
+<!--
 We also have one special class of PTRs that don't involve marshaling: PTR\_VOID and PTR\_CVOID. These are the target equivalents of void \* and const void \*, respectively. Because TADDRs are simply numbers, they don't have pointer semantics, which means that if we DACize code by converting void \* to TADDR (as was often the case in the past), we often need extra casts and other changes, even in code that does not compile for the DAC. Using PTR\_VOID makes it easier and cleaner to DACize code that uses void \* by preserving the semantics expected for void \*. If we DACize a function that uses PTR\_VOID or PTR\_CVOID, we can't directly marshal data from these addresses, since we have no idea how much data we would need to read. This means we can't dereference them (or even do pointer aritmetic), but this is identical to the semantics of void \*. As is the case for void \*, we generally cast them to a more specific PTR type when we need to use them. We also have a PTR\_BYTE type, which is a standard marshaled target pointer (that supports pointer arithmetic, etc.). In general, when we DACize code, void \* becomes PTR\_VOID and BYTE \* becomes PTR\_BYTE, just as you would expect. [daccess.h][daccess.h] has explanatory comments that provide more details about the use and semantics of the PTR\_VOID type.
+-->
+マーシャリングを伴わない特別なPTRクラスもあります。PTR\_VOIDとPTR\_CVOIDです。これらはそれぞれターゲットでのvoid \*とconst void \*に相当します。TADDRは単なる数値でありポインターのセマンティクスを持たないので、void \*をTADDRに変換するコードをDAC化する場合（過去にたくさんありました）、たとえコードをDACにコンパイルしないとしても、しばしば追加のキャストやその他の変換が必要になります。PTR\_VOIDを使うことで、void \*に期待されるセマンティクスを維持しつつ、void \*を使うDAC化済みコードを簡単かつ読みやすくできます。PTR\_VOIDまたはPTR\_CVOIDを使う関数をDAC化する場合、読み取る必要のあるデータ量を知るすべがないので、これらのアドレスからデータを直接マーシャリングすることはできません。つまり、それらの逆参照は（さらにポインター演算ですら）できませんが、このことはvoid \*のセマンティクスと同じです。void \*の場合と同様に、一般的には使う必要があるときに、より具体的なPTR型にキャストします。標準的なマーシャリングされるターゲットポインターであるPTR\_BYTE型もあります（これはポインター演算等をサポートします）。おそらく予想してとおりでしょうが、コードをDAC化する場合、一般的に、void \*はPTR\_BYTEとなり、BYTE \*はPTR\_BYTEになります。[daccess.h][daccess.h]の説明コメントには、PTR\_VOID型の使用方法とセマンティクスについて、さらに詳しい情報があります。
 
+<!--
 Occasionally, legacy code stores a target address in a host pointer type such as void \*. This is always a bug and makes it extremely difficult to reason about the code. It will also break when we support cross-platform, where the pointer types are differenct sizes). In DAC builds, the void \* type is a host pointer which should never contain a target address. Using PTR\_VOID instead allows us to indicate that a void pointer type is a target address. We are trying to eliminate all such uses, but some are quite pervasive in the code and will take a while to eliminate entirely.
+-->
+ときどき、void \*のようなホストポインター型にターゲットアドレスが保存されているレガシーコードがあります。これらはどんな場合でもバグであり、コードの論証が非常に困難になります。ポインター型のサイズが異なってくるので、クロスプラットフォームサポート時にも問題となります。DACビルドでは、void \*はホストポインター型であり、ターゲットアドレスを含むべきではありません。voidポインター型がターゲットアドレスを示すことができるよう、PTR\_VOIDの方を使ってください。そのような使い方を完全になくそうとしてはいますが、いくつかはコードの至る所に散在しており、完全に取り除くにはしばらく時間がかかります。
 
 <!--
 ### Conversions
 -->
 ### 変換
 
+<!--
 In earlier CLR versions, we used C-style type casting, macros, and constructors to cast between types. For example, in MethodIterator::Next, we have the following:
+-->
+CLRの前のバージョンでは、型のキャストに、Cスタイルの型キャスト、マクロ、コンストラクターを使っていました。たとえば、MethodIterator::Nextは次のようになっています。
 
 	if (methodCold)
 	{
@@ -271,19 +307,38 @@ In earlier CLR versions, we used C-style type casting, macros, and constructors 
 			m_pCMH = PTR_CORCOMPILE_METHOD_COLD_HEADER((TADDR)methodCold);
 			...
 
+<!--
 Both methodCold and methodCode are declared as BYTE \*, but in fact hold target addresses. In line 4, methodCold is casted to a TADDR and used as the argument to the constructor for PTR\_CORCOMPILE\_METHOD\_COLD\_HEADER. At this point, methodColdHeader is explicitly a target address. In line 6, there is another C-style cast for methodCode. The hotHeader field of methodColdHeader is of type PTR\_CORCOMPILE\_METHOD\_HEADER. The macro PTR\_TO\_TADDR extracts the raw target address from this PTR type and assigns it to methodCode. Finally, in line 9,  another instance of type PTR\_CORCOMPILE\_METHOD\_COLD\_HEADER is constructed. Again, methodCold is casted to TADDR to pass to this constructor.
+-->
+methodColdとmethodCodeは両方ともBYTE \*として宣言されていますが、実際にはターゲットアドレスを保持しています。4行目で、methodColdはTADDRにキャストされ、PTR\_CORCOMPILE\_METHOD\_COLD\_HEADERのコンストラクター引数として使われています。ここで、methodColdHeaderが明示的にターゲットアドレスになっています。6行目では、methodCodeに対する別のCスタイルのキャストがあります。methodColdHeaderのhotHeaderフィールドはPTR\_CORCOMPILE\_METHOD\_HEADER型です。PTR\_TO\_TADDRマクロは、このPTR型から生のターゲットアドレスを取り出し、methodCodeに代入します。最後に、9行目では、PTR\_CORCOMPILE\_METHOD\_COLD\_HEADER型の別のインスタンスが作成されます。再び、methodColdがTADDRにキャストされ、子のコンストラクターに渡されています。
 
+<!--
 If this code seems overly complex and confusing to you, that's good. In fact it is. Worse, it provides no protection for the separation of host and target addresses. From the declarations of methodCold and methodCode, there is no particular reason to interpret them as target addresses at all. If these pointers were dereferenced in DAC builds as if they really were host pointers, the process would probably AV. This snippet demonstrates that any arbitrary pointer type (as opposed to a PTR type) can be casted to a TADDR. Given that these two variables always hold target addresses, they should be of type PTR\_BYTE, rather than BYTE \*.
+-->
+このコードは過度に複雑で分かりづらかったとしても、問題ありません。事実その通りなのです。さらに悪いことに、ホストアドレスとターゲットアドレスの分離に対する保護をまったく提供していません。methodColdとmethodCodeの宣言から、それらをターゲットアドレスとして解釈する具体的な理由がまったくわかりません。DACビルドにおいてこれらのポインターが実際にはホストポインターであると仮定して逆参照されたとしたら、デバッガーのプロセスでアクセス違反が発生することでしょう。このコード片は、（PTR型とは異なり）あらゆる任意のポインター型をTADDRにキャストとできることを示しています。これら2つの変数が常にターゲットアドレスを保持するのだとしたら、BYTE \*ではなくPTR\_BYTEにすべきです。
 
+<!--
 There is also a disciplined means to cast between different PTR types: dac\_cast. The dac\_cast operator is the DAC-aware vesion of the C++ static\_cast operator (which the CLR coding conventions stipulate instead of C-style casts when casting pointer types). The dac\_cast operator will do any of the following things:
+-->
+異なるPTR型間でのキャストに対する規定された方法としてdac\_castもあります。dac\_cast演算子は、C++のstatic\_cast演算子のDAC対応版です（CLRのコーディング規約は、ポインター型のキャストについてCスタイルのキャストではなくstatic\_cast演算子を使うよう規定しています）。dac\_cast演算子は次のいずれかを行います。
 
+<!--
 1. Create a PTR type from a TADDR
 2. Convert one PTR type to another
 3. Create a PTR from a host instance previously marshaled to the DAC cache
 4. Extract the TADDR from a PTR type
 5. Get a TADDR from a host instance previously marshaled to the DAC cache
+-->
+1. TADDRからのPTR型の作成。
+2. PTR型のもう片方のPTR型への変換。
+3. 事前にDACキャッシュにマーシャリングされているホストインスタンスからのPTRの作成。
+4. PTR型からのTADDRの抽出。
+5. 事前にDACキャッシュにマーシャリングされているホストインスタンスからのTADDRの取得。
 
+<!--
 Now, assuming both methodCold and methodCode are declared to be of type PTR\_BYTE, the code above can be rewritten as follows.
+-->
+ここで、methodColdとmethodCodeの両方がPTR\_BYTE型で宣言されていたとすると、前述のコードは次のように書き換えることができます。
 
 	if (methodCold)
 	{
@@ -295,25 +350,38 @@ Now, assuming both methodCold and methodCode are declared to be of type PTR\_BYT
 			// Matched the cold code
 			m_pCMH = methodColdHeader;
 
+<!--
 You might argue that this code still seems complex and confusing, but at least we have significantly reduced the number of casts and constructors. We have also used constructs that maintain the separation between host and target pointers, so we have made the code safer. In particular, dac\_cast will often generate compiler or run-time errors if we try to do the wrong thing. In general, dac\_cast should be used for conversions.
+-->
+このコードはまだ複雑でわかりづらいと思うかもしれませんが、少なくともキャストとコンストラクターの数は激減しています。ホストポインターとターゲットポインターの分離を維持するコード構造も使っているので、コードがより安全になりました。特に、dac\_castは、間違ったことをしようとしたときに、しばしばコンパイラーエラーや実行時エラーを生成します。一般的に、変換にはdac\_castを使うべきです。
 
 <!--
 DACizing
 -->
-DAC対応
+DAC化
 ========
 
 <!--
 When do you need to DACize?
 -->
-DAC対応が必要な場合とは
+DAC化が必要な場合とは
 ---------------------------
 
+<!--
 Whenever you add a new feature, you will need to consider its debuggability needs and DACize the code to support your feature. You must also ensure that any other changes, such as bug fixes or code clean-up, conform to the DAC rules when necessary. Otherwise, the changes will break the debugger or SOS. If you are simply modifying existing code (as opposed to implementing a new feature), you will generally be able to determine that you need to worry about the DAC when a function you modify includes a SUPPORTS\_DAC contract. This contract has a few variants such as SUPPORTS\_DAC\_WRAPPER and LEAF\_DAC\_CONTRACT. You can find comments explaining the differences in [contract.h][contract.h]. If you see a number of DAC-specific types in the function, you should assume the code will run in DAC builds.
+-->
+新しい機能を追加する場合、その機能のデバッグ容易性の要求について検討し、その機能をサポートするコードをDAC化する必要があります。バグ修正やコードのクリーンアップのようなその他の変更についても、必要に応じてDACの規則に従うようにしなければなりません。そうしないと、その変更によってデバッガーやSOSが動作しなくなります。（新しい機能を実装するのではなく）既存のコードを単に修正する場合、一般的に、関数がSUPPORTS\_DACコントラクトを含んでいる関数を修正する場合にはDACのことを考慮する必要がある、と判断できます。このコントラクトにはSUPPORTS\_DAC\_WRAPPERやLEAF\_DAC\_CONTRACTのようないくつかのバリエーションがあり、その違いは[contract.h][contract.h]のコメントで説明されています。関数にいくつかのDAC固有の型がある場合、そのコードはDACビルドで実行されると考えるべきです。
 
 [contract.h]: https://github.com/dotnet/coreclr/blob/master/src/inc/contract.h
 
+<!--
 DACizing ensures that code in the engine will work correctly with the DAC. It is important to use the DAC correctly to marshal values from the target to the host. Target addresses used incorrectly from the host (or vice versa) may reference unmapped addresses. If addresses are mapped, the values will be completely unrelated to the values expected. As a result, DACizing mostly involves ensuring that we use PTR types for all values that the DAC needs to marshal. Another major task is to ensure that we do not allow invasive code to execute in DAC builds. In practice, this means that we must sometimes refactor code or add DACCESS\_COMPILE preprocessor directives. We also want to be sure that we add the appropriate SUPPORTS\_DAC contract. The use of this contract signals to developers that the function works with the DAC. This is important for two reasons:
+-->
+DAC化は、実行エンジン内のコードがDAC併用時に正しく動作するようにすることです。ターゲットからホストに値をマーシャリングするには、DACを正しく使っていることが重要です。ホストからターゲットアドレスを不正に使う（あるいはその逆の）場合、マップされていないアドレスを参照することになるかもしれません。アドレスがマップされている場合、その値は期待している値とは全く関係のないものになります。結果として、DAC化は、DACがマーシャリングする必要のある全ての値に対してPTR型を使うようにすることとほとんど同じです。もう一つの主要タスクは、DACビルドで侵略的なコードの実行を許可しないようにすることです。実際には、コードをリファクタリングするか、DACCESS\_COMPILEプリプロセッサーディレクティブを追加する必要があるということになります。適切なSUPPORTS\_DACコントラクトも追加するようにしたほうが良いでしょう。このコントラクトを使うことで、開発者にその関数がDACで動作することが伝わります。これは2つの理由から重要です。
 
+<!--
 1. If we later call it from some other SUPPORTS\_DAC function, we know that it is DAC-safe and we don't need to worry about DACizing it.
 2. If we make modifications to the function, we need to make sure that they are DAC-safe. If we add a call to another function from this one, we also need to ensure that it is DAC-safe or that we only make the call in non-DAC builds.
+-->
+1. 後で、別のSUPPORTS\_DAC関数から呼び出す場合に、その関数がDAC安全であり、そのDAC化について心配しなくてもいいことがわかる。
+2. その関数を修正する場合、修正をDAC安全に行う必要がある。そこから別の関数の呼び出しを追加する場合、新しい呼び出し先がDAC安全であるか、または非DACビルドでのみその呼び出しが行われるようにしなければならない。
