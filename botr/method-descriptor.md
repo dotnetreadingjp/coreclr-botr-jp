@@ -1,7 +1,7 @@
 メソッド記述子
 =================
 
-（これは https://github.com/dotnet/coreclr/blob/master/Documentation/botr/method-descriptor.md の日本語訳です。対象rev.は 09ad260）
+（これは https://github.com/dotnet/coreclr/blob/master/Documentation/botr/method-descriptor.md の日本語訳です。対象rev.は 6d9f7cb）
 
 Author: Jan Kotas ([@jkotas](https://github.com/jkotas)) - 2006
 
@@ -72,16 +72,18 @@ COMインターフェイスのメソッド。非ジェネリックインター�
 
 仮想メソッドと継承は、C++でさまざまなMethodDescを実装する自然な方法と思われます。仮想メソッドでは各MethodDescにvtableポインタが追加されることになり、貴重なメモリ空間が大量に浪費されるでしょう。vtableポインタはx86で4バイトを占有します。その代わりに、仮想化は3ビットに収まるMethodDesc種別による分岐によって実装されます。例：
 
-	DWORD MethodDesc::GetAttrs()
-	{
-	    if (IsArray())
-	        return ((ArrayMethodDesc\*)this)->GetAttrs();
+```c++
+DWORD MethodDesc::GetAttrs()
+{
+	if (IsArray())
+		return ((ArrayMethodDesc\*)this)->GetAttrs();
 
-	    if (IsDynamic())
-	        return ((DynamicMethodDesc\*)this)->GetAttrs();
+	if (IsDynamic())
+		return ((DynamicMethodDesc\*)this)->GetAttrs();
 
-	    return GetMDImport()->GetMethodDefProps(GetMemberDef());
-	}
+	return GetMDImport()->GetMethodDefProps(GetMemberDef());
+}
+```
 
 メソッドスロット（method slot）
 ------------
@@ -229,9 +231,11 @@ StubPrecodeは基本的な種類のプリコードです。スクラッチレジ
 
 x86のStubPrecodeは次のようになります：
 
+```assembly
 	mov eax,pMethodDesc
 	mov ebp,ebp // プリコードの種類をマークするダミー命令
 	jmp target
+```
 
 「target」は、最初は事前スタブを指し示します。そして、最終的なターゲットを指し示すように上書きされます。最終的なターゲット（スタブまたはネイティブコード）は、eax内のMethodDescを使っても使わなくても構いません。スタブは頻繁にMethodDescを使用し、ネイティブコードはMethodDescを使用しません。
 
@@ -243,18 +247,22 @@ FixupPrecodeのもっとも一般的な使用は、NGenイメージにおける�
 
 FixupPrecodeのx86における初期状態は次のとおりです：
 
+```assembly
 	call PrecodeFixupThunk // この呼び出しは決して戻ってきません。
 	                       // PrecodeFixupThunkはリターンアドレスをポップし、
 	                       // そのアドレスを使用してこの後ろにあるpMethodDescをフェッチして、
 	                       // JITコンパイルされなければならないメソッドが何かを判別します。
 	pop esi // プリコードの種類をマークするダミー命令
 	dword pMethodDesc
+```
 
 上書きされると、最終的なターゲットを指し示します：
 
+```assembly
 	jmp target
 	pop edi
 	dword pMethodDesc
+```
 
 <sup>2</sup> スクラッチレジスタにMethodDescを渡す行為は、**MethodDesc呼び出し規約**と言われることがあります。
 
@@ -266,6 +274,7 @@ FixupPrecodeは領域を節約し、プリコードのコード密度を改善�
 
 FixupPrecodeチャンクはx86で次のようになります：
 
+```assembly
 	jmp Target2
 	pop edi // プリコードの種類をマークするダミー命令
 	db MethodDescChunkIndex
@@ -282,6 +291,7 @@ FixupPrecodeチャンクはx86で次のようになります：
 	db 0 (PrecodeChunkIndex)
 
 	dw pMethodDescBase
+```
 
 1つのFixupPrecodeチャンクは1つのMethodDescChunkに対応します。ただし、FixupPrecodeチャンク内のFixupPrecodeと、MethodDescChunk内のMethodDescの間に1:1の対応付けはありません。それぞれのFixupPrecodeは所属するメソッドのインデックスを持ちます。これによって、必要とするメソッドに対してのみFixupPrecodeチャンクにFixupPrecodeを割り当てられるようにできます。
 
@@ -299,23 +309,25 @@ StubPrecodeまたはFixupPrecodeを使用して実装される仮エントリポ
 
 コンパクトエントリポイントはx86において次のようになります。
 
-	entrypoint0:
-	 mov al,0
-	 jmp short Dispatch
+```assembly
+entrypoint0:
+	mov al,0
+	jmp short Dispatch
 
-	entrypoint1:
-	 mov al,1
-	 jmp short Dispatch
+entrypoint1:
+	mov al,1
+	jmp short Dispatch
 
-	entrypoint2:
-	 mov al,2
-	 jmp short Dispatch
+entrypoint2:
+	mov al,2
+	jmp short Dispatch
 
-	Dispatch:
-	 movzx eax,al
-	 shl eax, 3
-	 add eax, pBaseMD
-	 jmp PreStub
+Dispatch:
+	movzx eax,al
+	shl eax, 3
+	add eax, pBaseMD
+	jmp PreStub
+```
 
 仮エントリポイントの割り当ては、常に、利用可能な選択肢から最も小さな仮エントリポイントを選ぼうとします。たとえば、x86において、単一のコンパクトエントリポイントは単一のStubPrecodeよりも大きくなります。この場合、StubPrecodeの方がコンパクトエントリポイントよりも優先されます。本エントリポイント用のプリコードの割り当ては、一致する型のものが存在するならば、割り当て済みの仮エントリポイントのプリコードを再利用しようとします。
 
@@ -327,12 +339,14 @@ ThisPtrRetBufPrecodeは、値型を返すオープンインスタンスデリゲ
 
 ThisPtrRetBufPrecodeは次のようになります：
 
+```assembly
 	mov eax,ecx
 	mov ecx,edx
 	mov edx,eax
 	nop
 	jmp entrypoint
 	dw pMethodDesc
+```
 
 **NDirectImportPrecode**
 
@@ -342,6 +356,8 @@ NDirectImportPrecodeはアンマネージドP/Invokeターゲットの遅延バ�
 
 NDirectImportPrecodeはx86において次のようになります：
 
+```assembly
 	mov eax,pMethodDesc
 	mov eax,eax // プリコードの型をマークするダミー命令
 	jmp NDirectImportThunk // pMethodDesc用のP/Invokeターゲットを遅延読み込みします
+```

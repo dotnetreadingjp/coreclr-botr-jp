@@ -1,7 +1,7 @@
 ﻿ガベージコレクションの設計
 =========================
 
-(これは https://github.com/dotnet/coreclr/blob/master/Documentation/botr/garbage-collection.md の日本語訳です。対象rev.は 8d3936b ）
+(これは https://github.com/dotnet/coreclr/blob/master/Documentation/botr/garbage-collection.md の日本語訳です。対象rev.は b00dc48）
 
 著者: Maoni Stephens ([@maoni0](https://github.com/maoni0)) - 2015
 
@@ -153,7 +153,7 @@ GCがコンパクションをすることにしたならば、オブジェクト
 用語：
 
 - **WKS GC：** ワークステーション GC。
-- **SRV GC：** サーバー GC。
+- **SVR GC：** サーバー GC。
 
 機能的な振る舞い
 -------------------
@@ -205,78 +205,82 @@ try_allocate_more_spaceは、GCを起動する必要がある場合にGarbageCol
 
 同時実行GCが無効なWKS GCの場合、GarbageCollectGenerationは、GCを起動したユーザースレッド上ですべて完了します。コードフローは次のとおりです。
 
-     GarbageCollectGeneration()
-     {
-         SuspendEE();
-         garbage_collect();
-         RestartEE();
-     }
-     
-     garbage_collect()
-     {
-         generation_to_condemn();
-         gc1();
-     }
-     
-     gc1()
-     {
-         mark_phase();
-         plan_phase();
-     }
-     
-     plan_phase()
-     {
-         // compactを行うかどうかを判定するための実際の計画フェーズの処理
-         if (compact)
-         {
-             relocate_phase();
-             compact_phase();
-         }
-         else
-             make_free_lists();
-     }
+```c++
+GarbageCollectGeneration()
+{
+    SuspendEE();
+    garbage_collect();
+    RestartEE();
+}
+
+garbage_collect()
+{
+    generation_to_condemn();
+    gc1();
+}
+
+gc1()
+{
+    mark_phase();
+    plan_phase();
+}
+
+plan_phase()
+{
+    // compactを行うかどうかを判定するための実際の計画フェーズの処理
+    if (compact)
+    {
+        relocate_phase();
+        compact_phase();
+    }
+    else
+        make_free_lists();
+}
+```
 
 同時実行GCが有効なWKS GC（既定のケース）の場合、バックグラウンドGC用のコードフローは次のとおりです。
 
-     GarbageCollectGeneration()
-     {
-         SuspendEE();
-         garbage_collect();
-         RestartEE();
-     }
-     
-     garbage_collect()
-     {
-         generation_to_condemn();
-         // バックグラウンドGCを行うかどうかを判定
-         // バックグラウンドGCスレッドを起動するかどうかを判定
-         do_background_gc();
-     }
-     
-     do_background_gc()
-     {
-         init_background_gc();
-         start_c_gc ();
-     
-         // BGCによって再開されるまで待機。
-         wait_to_proceed();
-     }
-     
-     bgc_thread_function()
-     {
-         while (1)
-         {
-             // イベントを待機
-             // 起動
-             gc1();
-         }
-     }
-     
-     gc1()
-     {
-         background_mark_phase();
-         background_sweep();
-     }
+```c++
+GarbageCollectGeneration()
+{
+    SuspendEE();
+    garbage_collect();
+    RestartEE();
+}
+
+garbage_collect()
+{
+    generation_to_condemn();
+    // バックグラウンドGCを行うかどうかを判定
+    // バックグラウンドGCスレッドを起動するかどうかを判定
+    do_background_gc();
+}
+
+do_background_gc()
+{
+    init_background_gc();
+    start_c_gc ();
+
+    // BGCによって再開されるまで待機。
+    wait_to_proceed();
+}
+
+bgc_thread_function()
+{
+    while (1)
+    {
+        // イベントを待機
+        // 起動
+        gc1();
+    }
+}
+
+gc1()
+{
+    background_mark_phase();
+    background_sweep();
+}
+```
 
 参考文献
 =========

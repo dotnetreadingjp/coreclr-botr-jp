@@ -1,6 +1,6 @@
 CLRスレッディング概要
 ======================
-(これは https://github.com/dotnet/coreclr/blob/8d3936bff7ae46a5a964b15b5f0bc3eb8d4e32db/Documentation/botr/threading.md の日本語訳です。対象rev.は 8d3936b）
+(これは https://github.com/dotnet/coreclr/blob/master/Documentation/botr/threading.md の日本語訳です。対象rev.は b00dc48）
 
 マネージドスレッド対ネイティブスレッド
 ==========================
@@ -215,12 +215,12 @@ GCX\_COOPがGCヒープのロックを効率的に獲得することを理解し
 
 同様に、GCX\_PREEMPは、スレッドによって保持されていたロックを _解放する_ 可能性があります 。割り込みモードに入る前には細心の注意を払って、すべてのGC参照が適切に保護されるようにする必要があります。
 
-[コードの規則](../coding-guidelines/clr-code-guide.md)に関するドキュメントでは、GCモードを切り替える際の安全を確保するために必要な規律を説明しています。
+[コードの規則](https://github.com/dotnet/coreclr/blob/master/Documentation/coding-guidelines/clr-code-guide.md)に関するドキュメントでは、GCモードを切り替える際の安全を確保するために必要な規律を説明しています。
 
 Crst
 ----
 
-マネージドコードのための好ましいロック機構はモニターでしたが、それと同様に、VMコードに適したメカニズムがCrstです。モニターと同じようにCrstもハイブリッドロックで、ホストやGCモードを認識します。Crstも「ロックの平準化」によるデッドロック回避を実装しています。[BotRのCrstレベリングのチャプター](../coding-guidelines/clr-code-guide.md#entering-and-leaving-crsts)でそのことが説明されています。
+マネージドコードのための好ましいロック機構はモニターでしたが、それと同様に、VMコードに適したメカニズムがCrstです。モニターと同じようにCrstもハイブリッドロックで、ホストやGCモードを認識します。Crstも「ロックの平準化」によるデッドロック回避を実装しています。[BotRのCrstレベリングのチャプター](https://github.com/dotnet/coreclr/blob/master/Documentation/coding-guidelines/clr-code-guide.md#264-entering-and-leaving-crsts)でそのことが説明されています。
 
 協調モードでCrstを取得することは一般的にはやってはいけないことですが、どうしても必要な箇所には例外事項が作られています。
 

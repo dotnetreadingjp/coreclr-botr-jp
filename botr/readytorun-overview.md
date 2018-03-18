@@ -4,7 +4,7 @@ Managed Executables with Native Code
 ネイティブコード付きのマネージド実行可能ファイル
 ===
 
-（これは https://github.com/dotnet/coreclr/blob/750b18cb116566c0579b716a08b701b26b7cb920/Documentation/botr/readytorun-overview.md の日本語訳です。対象rev.は 750b18c）
+（これは https://github.com/dotnet/coreclr/blob/master/Documentation/botr/readytorun-overview.md の日本語訳です。対象rev.は ce99897）
 
 <!--
 Since shipping the .NET Runtime over 10 years ago, there has only been one file format which can be used to distribute and deploy managed code components: the CLI file format. This format expresses all execution as machine independent intermediate language (IL) which must either be interpreted or compiled to native code sometime before the code is run. This lack of an efficient, directly executable file format is a very significant difference between unmanaged and managed code, and has become more and more problematic over time. Problems include:
@@ -190,9 +190,9 @@ Thus this proposal does _not_ suggest that we try to solve the problem of having
 そのため、この提案は値型のレイアウト変更がある場合におけるバージョン耐性（version resilience）の問題を解決しようとするための提案を_しません_。その代わりに、我々は新しい互換性規則を作成することを提案します。
 
 <!--
-**It is a breaking change to change the number or type of any (including private) fields of a public value type (struct). However if the struct is non-public (that is internal) then the restriction does not apply.**
+**It is a breaking change to change the number or type of any (including private) fields of a public value type (struct). However if the struct is non-public (that is internal), and not reachable from any nesting of value type fields in any public value type, then the restriction does not apply.**
 -->
-**publicな値型（構造体）のフィールド（publicでないものを含む）の数または型の変更は、すべて互換性のない変更である。ただし、その構造体が非public（つまりinternal）である場合、この制約は適用されない。**
+**publicな値型（構造体）のフィールド（publicでないものを含む）の数または型の変更は、すべて互換性のない変更である。ただし、その構造体が非public（つまりinternal）であり、publicな値型にある値型のフィールドのネスト構造から到達不能な場合、この制約は適用されない。**
  
 <!--
 This is a compatibility that is not present for CIL. All other changes allowed by CIL can be allowed by native code without prohibitive penalty. In particular the following changes are allowed:
