@@ -1,13 +1,13 @@
 Mscorlibおよびランタイム呼び出し
 ===
 
-（これは https://github.com/dotnet/coreclr/blob/8d3936bff7ae46a5a964b15b5f0bc3eb8d4e32db/Documentation/botr/mscorlib.md の日本語訳です。対象rev.は 8d3936b）
+（これは https://github.com/dotnet/coreclr/blob/master/Documentation/botr/mscorlib.md の日本語訳です。対象rev.は afa95ac）
 
 著者: Brian Grunkemeyer ([briangru](https://github.com/briangru)) - 2006
 
 # 導入
 
-Mscorlibは型システムの中心的部分を定義するアセンブリであり、基本クラスライブラリのけっこうな部分を占めるものです。基本データ型はこのアセンブリの中にあり、CLRと密に結合しています。ここでは、mscorlib.dllがなぜ、いかに特別であるか、そしてマネージドコードからQCallおよびFCallメソッドを経由したCLR呼び出しの基本について、知ることができるでしょう。CLRからのマネージドコードの呼び出しについても議論します。
+mscorlibは.NET Frameworkの型システムの中心的部分を定義するアセンブリであり、基本クラスライブラリのけっこうな部分を占めるものです。.NET CoreではSystem.Private.CoreLibにリネームされましたが、コードとドキュメントの大多数ではいまだにmscorlibと呼んでいます。基本データ型はこのアセンブリの中にあり、CLRと密に結合しています。ここでは、mscorlib.dllがなぜ、いかに特別であるか、そしてマネージドコードからQCallおよびFCallメソッドを経由したCLR呼び出しの基本について、知ることができるでしょう。CLRからのマネージドコードの呼び出しについても議論します。
 
 ## 依存関係
 
@@ -85,10 +85,8 @@ QCallの引数としてふさわしい型は、P/Invokeマーシャラーで効�
 
 	class Foo
 	{
-	    // 全てのQCallは、以下のDllImportと
-	    // SuppressUnmanagedCodeSecurity 属性を使用すべきです。
+	    // 全てのQCallは、以下のDllImport属性を使用するはずです。
 	    [DllImport(JitHelpers.QCall, CharSet = CharSet.Unicode)]
-	    [SuppressUnmanagedCodeSecurity]
 	    // QCallsは常にstatic externである必要があります。
 	    private static extern bool Bar(int flags, string inString, StringHandleOnStack retString);
 

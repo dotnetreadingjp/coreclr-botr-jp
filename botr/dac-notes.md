@@ -4,7 +4,7 @@ Data Access Component (DAC) Notes
 データアクセスコンポーネント（DAC：Data Access Component）メモ
 =================================
 
-（これは https://github.com/dotnet/coreclr/commit/8d3936bff7ae46a5a964b15b5f0bc3eb8d4e32db の日本語訳です。対象rev.は 8d3936bf）
+（これは https://github.com/dotnet/coreclr/blob/master/Documentation/botr/dac-notes.md の日本語訳です。対象rev.は a0c8fe6）
 
 <!--
 Date: 2007

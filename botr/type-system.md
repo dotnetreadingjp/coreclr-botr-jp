@@ -1,6 +1,6 @@
 型システム概要
 ====================
-(これは https://github.com/dotnet/coreclr/blob/09ad260f28df803cf288cecd5aa681c81f7bfa13/Documentation/botr/type-system.md の日本語訳です。対象rev.は 09ad260 ）
+(これは https://github.com/dotnet/coreclr/blob/master/Documentation/botr/type-system.md の日本語訳です。対象rev.は 1ed2739）
 
 Author: David Wrighton ([@davidwrighton](https://github.com/davidwrighton)) - 2010
 

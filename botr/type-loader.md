@@ -1,7 +1,7 @@
 ﻿タイプローダーの設計
 ===
 
-（これは https://github.com/dotnet/coreclr/blob/8d3936bff7ae46a5a964b15b5f0bc3eb8d4e32db/Documentation/botr/type-loader.md の日本語訳です。対象rev.は 8d3936b）
+（これは https://github.com/dotnet/coreclr/blob/master/Documentation/botr/type-loader.md の日本語訳です。対象rev.は 8d3936b）
 
 Author: Ladi Prosek - 2007
 

@@ -1,7 +1,7 @@
 ﻿仮想スタブディスパッチ
 =====================
 
-(これはhttps://github.com/dotnet/coreclr/blob/master/Documentation/botr/virtual-stub-dispatch.mdの日本語訳です。対象rev.は 8d3936b ）
+(これは https://github.com/dotnet/coreclr/blob/master/Documentation/botr/virtual-stub-dispatch.md の日本語訳です。対象rev.は a0c8fe6）
 
 著者：Simon Hall ([@snwbrdwndsrf](https://github.com/snwbrdwndsrf)) - 2006
 

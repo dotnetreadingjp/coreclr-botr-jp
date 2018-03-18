@@ -1,6 +1,6 @@
 ランタイムの例外について全開発者が知るべきこと
 ============================================================
-(これは https://github.com/dotnet/coreclr/blob/master/Documentation/botr/exceptions.md の日本語訳です。対象rev.は 8d3936b)
+(これは https://github.com/dotnet/coreclr/blob/master/Documentation/botr/exceptions.md の日本語訳です。対象rev.は 0e085b7)
 
 Date: 2005
 
@@ -26,13 +26,15 @@ EX_TRY
 
 基本的なマクロは、もちろん EX_TRY / EX_CATCH / EX_END_CATCH です。使用法は次のようなものです。
 
-    EX_TRY
-      // Call some function.  Maybe it will throw an exception. 
-      Bar();
-    EX_CATCH 
-      // If we're here, something failed. 
-      m_finalDisposition = terminallyHopeless; 
-    EX_END_CATCH(RethrowTransientExceptions) 
+```c++
+EX_TRY
+    // Call some function.  Maybe it will throw an exception. 
+    Bar();
+EX_CATCH 
+    // If we're here, something failed. 
+    m_finalDisposition = terminallyHopeless; 
+EX_END_CATCH(RethrowTransientExceptions) 
+```
 
 EX_TRY マクロは単純にtryブロックを導入するものです。これはC++の "try" によく似ていますが、左波かっこ（ { ）も含まれている点が異なります。
 
@@ -60,25 +62,31 @@ GET_EXCEPTION() & GET_THROWABLE()
 
 多くの場合、分類に必要なものは例外に対応するHRESULTだけです。そしてそれを得るのはとても簡単です。
 
-    HRESULT hr = GET_EXCEPTION()->GetHR();
+```c++
+HRESULT hr = GET_EXCEPTION()->GetHR();
+```
 
 それ以上の情報を得るにはマネージド例外オブジェクトを利用するのがもっとも簡単であることが多いです。そして、例外がマネージドコードに送られる予定であれば、それが今すぐであれ、今はキャッシュしておいて後で送られるのであれ、マネージドオブジェクトは結局必要になります。しかも例外オブジェクトを得るのも同じように簡単です。もちろん、得られるのはマネージドオブジェクト参照ですから、いつものルールはすべて当てはまります。
 
-    OBJECTREF throwable = NULL;
-    GCPROTECT_BEGIN(throwable);
-    // . . .
-    EX_TRY
-        // . . . do something that might throw
-    EX_CATCH
-        throwable = GET_THROWABLE();
-    EX_END_CATCH(RethrowTransientExceptions)
-    // . . . do something with throwable
-    GCPROTECT_END()
+```c++
+OBJECTREF throwable = NULL;
+GCPROTECT_BEGIN(throwable);
+// . . .
+EX_TRY
+    // . . . do something that might throw
+EX_CATCH
+    throwable = GET_THROWABLE();
+EX_END_CATCH(RethrowTransientExceptions)
+// . . . do something with throwable
+GCPROTECT_END()
+```
 
 時には、C++例外オブジェクトが必要になることを避けられないこともありますが、しかしそのほとんどは例外の実装の内部です。C++例外の型が正確に何であるかが重要な場合は、RTTIに似た軽量な関数群が用意されているので、それを使って例外を分類できます。たとえば、
 
-    Exception *pEx = GET_EXCEPTION();
-    if (pEx->IsType(CLRException::GetType())) {/* ... */}
+```c++
+Exception *pEx = GET_EXCEPTION();
+if (pEx->IsType(CLRException::GetType())) {/* ... */}
+```
 
 これで、例外がCLRException（またはその派生型）かどうかを判定できるでしょう。
 
@@ -111,12 +119,14 @@ EX_END_CATCH(RethrowTransientExceptions)
 
 ある例外に対応するHRESULTしか必要でないことも時々あります。コードがCOMに対するインターフェースの場合などは特にそうです。そのような場合は、EX_CATCHブロックを書くよりもEX_CATCH_HRESULTの方が単純です。典型的なケースは以下のような形になります。
 
-    HRESULT hr;
-    EX_TRY
-      // code
-    EX_CATCH_HRESULT (hr)
+```c++
+HRESULT hr;
+EX_TRY
+    // code
+EX_CATCH_HRESULT (hr)
 
-    return hr;
+return hr;
+```
 
 __しかし、これは非常に魅力的にもかかわらず、常に正しいわけではありません。__ EX_CATCH_HRESULT はすべての例外をキャッチして、HRESULTを保存して、そしてキャッチした例外を握りつぶします。したがって、その関数で本当に必要なことが例外を握りつぶすことではないのなら、EX_CATCH_HRESULTは適切ではありません。
 
@@ -135,11 +145,13 @@ EX_TRY_FOR_FINALLY
 
 コードを抜けるときに補償処理のようなことをする必要がある場合は、finallyが適切でしょう。CLRにはtry/finallyを実装するマクロの組があります。
 
-    EX_TRY_FOR_FINALLY
-      // code
-    EX_FINALLY
-      // exit and/or backout code
-    EX_END_FINALLY
+```c++
+EX_TRY_FOR_FINALLY
+    // code
+EX_FINALLY
+    // exit and/or backout code
+EX_END_FINALLY
+```
 
 **重要** : EX_TRY_FOR_FINALLYマクロはC++例外処理ではなくSEHを使って組まれています。そして、C++コンパイラーはSEHとC++例外処理とを同じ関数内で混ぜることを許していません。自動デストラクターを持ったローカル変数は、デストラクターを実行するためにC++例外処理を要求します。したがって、EX_TRY_FOR_FINALLYを使っている関数では、EX_TRYを使うことはできませんし、自動デストラクターを持ったローカル変数を持つこともできません。
 
@@ -148,11 +160,13 @@ EX_HOOK
 
 よくある話ですが、補償処理のコードが必要だけれども、それは例外が投げられた時だけでいいという場合があります。そのような場合のためにEX_HOOKがあります。EX_FINALLYに似ていますが、「フック」節は例外が起こったときしか実行されません。起こった例外は「フック」節の末尾で自動で気に投げ直されます。
 
-    EX_TRY
-      // code
-    EX_HOOK
-      // code to run when an exception escapes the “code” block.
-    EX_END_HOOK
+```c++
+EX_TRY
+    // code
+EX_HOOK
+    // code to run when an exception escapes the “code” block.
+EX_END_HOOK
+```
 
 この構成にはEX_CATCHとEX_RETHROWを単に組み合わせたものよりちょっといい点があります。なぜかと言えば、スタックオーバーフロー以外の例外は投げ直されますが、スタックオーバーフローの場合はキャッチして（スタックを巻き戻し）、それから新しいスタックオーバーフロー例外を投げるからです。
 
@@ -161,7 +175,9 @@ EX_HOOK
 
 CLR内部で例外を投げるというのは、一般的に言って次の関数を呼び出す話です。
 
-    COMPlusThrow ( < args > )
+```c++
+COMPlusThrow ( < args > )
+```
 
 これには多数のオーバーロードがありますが、共通する考え方は、例外の「種別」をCOMPlusThrowに渡すということです。「種別」の一覧は一連のマクロで[Rexcep.h](https://github.com/dotnet/coreclr/blob/master/src/vm/rexcep.h)上に生成されており、そのさまざまな「種別」とは、kAmbiguousMatchExceptionや、kApplicationExceptionといったものです。（オーバーロードの）追加の引数はリソースや代理テキストを指定するものです。正しい「種別」を選択するには、だいたいにおいて同様のエラーを報告する別のコードを見つければよいでしょう。
 
@@ -274,21 +290,31 @@ C++の例外が投げられた際にUACHが見つからない場合の典型的�
 
 呼び出しフィルターを使うには、以下のようにする代わりに
 
-    length = SysStringLen(pBSTR);
+```c++
+length = SysStringLen(pBSTR);
+```
 
 以下のように書きます。
 
-    BOOL OneShot = TRUE;
+```c++
+BOOL OneShot = TRUE;
+struct Param {
+PAL_TRY	+        BSTR*  pBSTR;
+    int length;
+};
+struct Param param;
+param.pBSTR = pBSTR;
 
-    PAL_TRY
-    {
-      length = SysStringLen(pBSTR);
-    }
-    PAL_EXCEPT_FILTER(CallOutFilter, &OneShot)
-    {
-      _ASSERTE(!"CallOutFilter returned EXECUTE_HANDLER.");
-    }
-    PAL_ENDTRY;
+PAL_TRY(Param*, pParam, &param)
+{
+    pParam->length = SysStringLen(pParam->pBSTR);
+}
+PAL_EXCEPT_FILTER(CallOutFilter, &OneShot)
+{
+    _ASSERTE(!"CallOutFilter returned EXECUTE_HANDLER.");
+}
+PAL_ENDTRY;
+```
 
 呼び出しフィルターを掛けないコード呼び出しで例外が起きた場合は間違いなく、ランタイムには誤った例外が報告されるでしょう。誤って報告される例外の型がいつも一意に決まるとも限りません。というのも、何らかのマネージド例外が既に「飛行中」だった場合は、そのマネージド例外が報告されることになります。もしその時点で例外がなければ、OOMが報告されることになります。チェック済みビルドにおいては、通常は呼び出しフィルターが見つからなければ発火するアサーションがいくつかあります。それらのアサートメッセージには「ランタイムは例外の型が追跡できなくなったかもしれません」というテキストが含まれるでしょう。
 
