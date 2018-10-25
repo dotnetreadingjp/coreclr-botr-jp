@@ -12,7 +12,7 @@
 - ガベージコレクションの設計 [原文](https://github.com/dotnet/coreclr/blob/master/Documentation/botr/garbage-collection.md) [日本語訳](botr/garbage-collection.md)
 - CLRスレッディング概要 [原文](https://github.com/dotnet/coreclr/blob/master/Documentation/botr/threading.md) [日本語訳](botr/threading.md)
 - RyuJIT Overview [原文](https://github.com/dotnet/coreclr/blob/master/Documentation/botr/ryujit-overview.md) [日本語訳](botr/ryujit-overview.md)
-    ― Porting RyuJIT to other platforms [原文](https://github.com/dotnet/coreclr/blob/master/Documentation/botr/porting-ryujit.md) <del>[日本語訳](botr/porting-ryujit.md)</del>
+    - Porting RyuJIT to other platforms [原文](https://github.com/dotnet/coreclr/blob/master/Documentation/botr/porting-ryujit.md) <del>[日本語訳](botr/porting-ryujit.md)</del>
 - 型システム概要 [原文](https://github.com/dotnet/coreclr/blob/master/Documentation/botr/type-system.md) [日本語訳](botr/type-system.md)
 - タイプローダーの設計 [原文](https://github.com/dotnet/coreclr/blob/master/Documentation/botr/type-loader.md) [日本語訳](botr/type-loader.md)
 - メソッド記述子 [原文](https://github.com/dotnet/coreclr/blob/master/Documentation/botr/method-descriptor.md) [日本語訳](botr/method-descriptor.md)
